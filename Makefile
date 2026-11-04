@@ -1,28 +1,28 @@
-APP := build/CokeEverywhere.app
-BIN := $(APP)/Contents/MacOS/CokeEverywhere
+APP := build/SnowDesk.app
+BIN := $(APP)/Contents/MacOS/SnowDesk
 VERSION := $(shell plutil -extract CFBundleShortVersionString raw packaging/Info.plist)
-ZIP := build/CokeEverywhere-$(VERSION).zip
+ZIP := build/SnowDesk-$(VERSION).zip
 
 .PHONY: app install release test icon clean
 
 # Build the app bundle in build/.
 app:
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	go build -o build/CokeEverywhere-host .
-	cp build/CokeEverywhere-host $(BIN) # cp, not go build -o: BIN may be a universal binary from `make release`
+	go build -o build/SnowDesk-host .
+	cp build/SnowDesk-host $(BIN) # cp, not go build -o: BIN may be a universal binary from `make release`
 	cp packaging/Info.plist $(APP)/Contents/Info.plist
 	cp packaging/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	codesign --force --sign - $(APP)
 
 # Copy the app into /Applications, updating an older copy in place.
 install: app
-	ditto $(APP) /Applications/CokeEverywhere.app
+	ditto $(APP) /Applications/SnowDesk.app
 
 # Build a universal (Apple Silicon + Intel) app and zip it for a release.
 release: app
-	CGO_ENABLED=1 GOARCH=arm64 CC="clang -arch arm64" go build -o build/CokeEverywhere-arm64 .
-	CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -o build/CokeEverywhere-amd64 .
-	lipo -create -output $(BIN) build/CokeEverywhere-arm64 build/CokeEverywhere-amd64
+	CGO_ENABLED=1 GOARCH=arm64 CC="clang -arch arm64" go build -o build/SnowDesk-arm64 .
+	CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -o build/SnowDesk-amd64 .
+	lipo -create -output $(BIN) build/SnowDesk-arm64 build/SnowDesk-amd64
 	codesign --force --sign - $(APP)
 	ditto -c -k --keepParent $(APP) $(ZIP)
 	@echo "built $(ZIP)"

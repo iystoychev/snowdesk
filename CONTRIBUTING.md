@@ -1,10 +1,10 @@
-# Contributing to CokeEverywhere
+# Contributing to SnowDesk
 
 Thanks for helping make it snow on more Macs! Bug reports, ideas and pull requests are all welcome.
 
 ## Reporting a bug
 
-Open an [issue](https://github.com/iystoychev/coke-everywhere/issues/new/choose) with:
+Open an [issue](https://github.com/iystoychev/snowdesk/issues/new/choose) with:
 
 - your macOS version and Mac (Apple Silicon or Intel),
 - what you did, what you expected, and what happened,
@@ -19,10 +19,10 @@ Open a feature request issue. Describe what you would like to see and why. Small
 You need macOS, [Go](https://go.dev/dl/) 1.27 or newer and the Xcode Command Line Tools.
 
 ```bash
-git clone https://github.com/iystoychev/coke-everywhere.git
-cd coke-everywhere
+git clone https://github.com/iystoychev/snowdesk.git
+cd snowdesk
 make test        # go vet + all tests
-go build -o CokeEverywhere . && ./CokeEverywhere   # run from the terminal
+go build -o SnowDesk . && ./SnowDesk   # run from the terminal
 make install     # build the app and copy it to /Applications
 ```
 

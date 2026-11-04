@@ -19,8 +19,8 @@ import (
 	"time"
 	"unsafe"
 
-	"coke-everywhere/login"
-	"coke-everywhere/snow"
+	"snowdesk/login"
+	"snowdesk/snow"
 )
 
 // Cocoa must run on the main thread.
@@ -55,7 +55,7 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil && login.Enabled(home) {
 		// Keep start at login pointing at this binary if it was moved.
 		if err := setLogin(true); err != nil {
-			fmt.Fprintln(os.Stderr, "CokeEverywhere: start at login:", err)
+			fmt.Fprintln(os.Stderr, "SnowDesk: start at login:", err)
 		}
 	}
 	C.runApp()

@@ -33,6 +33,6 @@ body:
   - type: input
     id: version
     attributes:
-      label: CokeEverywhere version
-      description: Shown in ❄︎ → About CokeEverywhere.
+      label: SnowDesk version
+      description: Shown in ❄︎ → About SnowDesk.
       placeholder: "1.0"

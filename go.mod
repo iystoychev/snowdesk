@@ -1,3 +1,3 @@
-module coke-everywhere
+module snowdesk
 
 go 1.27

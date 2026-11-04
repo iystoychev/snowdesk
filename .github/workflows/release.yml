@@ -26,9 +26,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          zip=$(ls build/CokeEverywhere-*.zip)
+          zip=$(ls build/SnowDesk-*.zip)
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$zip" --clobber
           else
-            gh release create "$TAG" "$zip" --title "CokeEverywhere ${TAG#v}" --generate-notes
+            gh release create "$TAG" "$zip" --title "SnowDesk ${TAG#v}" --generate-notes
           fi

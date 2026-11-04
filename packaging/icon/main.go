@@ -1,5 +1,5 @@
 // Command icon draws the app icon (1024×1024 PNG): a white snowflake on a
-// red rounded square. Run by `make icon`.
+// blue rounded square. Run by `make icon`.
 package main
 
 import (
@@ -57,8 +57,8 @@ func sample(x, y float64) (r, g, b, a float64) {
 	if inFlake(x-S/2, y-S/2) {
 		return 1, 1, 1, 1
 	}
-	t := (y - (S/2 - half)) / (2 * half) // 0 at top, 1 at bottom
-	return 0.93 - 0.18*t, 0.12 - 0.06*t, 0.17 - 0.08*t, 1
+	t := (y - (S/2 - half)) / (2 * half)                  // 0 at top, 1 at bottom
+	return 0.30 - 0.14*t, 0.62 - 0.22*t, 0.95 - 0.20*t, 1 // icy blue, darker at the bottom
 }
 
 // inFlake reports whether (x, y), relative to the centre, is on the

@@ -204,9 +204,9 @@ enum { kInFlight = 3 };
 	// The countdown changes once a day; checking each minute catches midnight.
 	_titleTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(updateTitle) userInfo:nil repeats:YES];
 	NSMenu *m = [NSMenu new];
-	NSMenuItem *about = [m addItemWithTitle:@"About CokeEverywhere" action:@selector(showAbout:) keyEquivalent:@""];
+	NSMenuItem *about = [m addItemWithTitle:@"About SnowDesk" action:@selector(showAbout:) keyEquivalent:@""];
 	about.target = self;
-	NSMenuItem *repo = [m addItemWithTitle:@"CokeEverywhere on GitHub…" action:@selector(openRepo:) keyEquivalent:@""];
+	NSMenuItem *repo = [m addItemWithTitle:@"SnowDesk on GitHub…" action:@selector(openRepo:) keyEquivalent:@""];
 	repo.target = self;
 	[m addItem:NSMenuItem.separatorItem];
 	[m addItem:[self choices:@"Snow Amount" key:@"amount"
@@ -234,7 +234,7 @@ enum { kInFlight = 3 };
 	NSMenuItem *pause = [m addItemWithTitle:@"Pause" action:@selector(togglePause:) keyEquivalent:@"p"];
 	pause.target = self;
 	[m addItem:NSMenuItem.separatorItem];
-	[m addItemWithTitle:@"Quit CokeEverywhere" action:@selector(terminate:) keyEquivalent:@"q"];
+	[m addItemWithTitle:@"Quit SnowDesk" action:@selector(terminate:) keyEquivalent:@"q"];
 	_status.menu = m;
 
 	[self applySettings];
@@ -281,7 +281,7 @@ enum { kInFlight = 3 };
 	[self applySettings];
 }
 
-static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywhere";
+static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 
 - (void)showAbout:(id)sender {
 	NSMutableAttributedString *credits = [[NSMutableAttributedString alloc]
@@ -295,7 +295,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywher
 	[credits addAttribute:NSParagraphStyleAttributeName value:center range:NSMakeRange(0, credits.length)];
 	[NSApp activateIgnoringOtherApps:YES]; // a menu bar app is not active by default
 	[NSApp orderFrontStandardAboutPanelWithOptions:@{
-		NSAboutPanelOptionApplicationName : @"CokeEverywhere",
+		NSAboutPanelOptionApplicationName : @"SnowDesk",
 		NSAboutPanelOptionCredits : credits,
 	}];
 }
@@ -343,7 +343,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywher
 - (void)setupMetal:(NSView *)v scale:(CGFloat)scale {
 	_device = MTLCreateSystemDefaultDevice();
 	if (!_device) {
-		NSLog(@"CokeEverywhere: no Metal device");
+		NSLog(@"SnowDesk: no Metal device");
 		exit(1);
 	}
 	_queue = [_device newCommandQueue];
@@ -360,7 +360,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywher
 	NSError *err = nil;
 	id<MTLLibrary> lib = [_device newLibraryWithSource:kShaders options:nil error:&err];
 	if (!lib) {
-		NSLog(@"CokeEverywhere: shader compile failed: %@", err);
+		NSLog(@"SnowDesk: shader compile failed: %@", err);
 		exit(1);
 	}
 	_dotPipe = [self pipeline:lib vertex:@"dotV" fragment:@"dotF"];
@@ -370,7 +370,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywher
 		_triBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_TRI_FLOATS options:MTLResourceStorageModeShared];
 	}
 	_inflight = dispatch_semaphore_create(kInFlight);
-	_renderQ = dispatch_queue_create("CokeEverywhere.render", DISPATCH_QUEUE_SERIAL);
+	_renderQ = dispatch_queue_create("SnowDesk.render", DISPATCH_QUEUE_SERIAL);
 }
 
 - (id<MTLRenderPipelineState>)pipeline:(id<MTLLibrary>)lib vertex:(NSString *)vf fragment:(NSString *)ff {
@@ -385,7 +385,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywher
 	NSError *err = nil;
 	id<MTLRenderPipelineState> p = [_device newRenderPipelineStateWithDescriptor:d error:&err];
 	if (!p) {
-		NSLog(@"CokeEverywhere: pipeline %@ failed: %@", vf, err);
+		NSLog(@"SnowDesk: pipeline %@ failed: %@", vf, err);
 		exit(1);
 	}
 	return p;

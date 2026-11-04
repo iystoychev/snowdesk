@@ -1,18 +1,18 @@
 <div align="center">
 
-<img src="packaging/icon-256.png" width="128" alt="CokeEverywhere icon">
+<img src="packaging/icon-256.png" width="128" alt="SnowDesk icon">
 
-# CokeEverywhere
+# SnowDesk
 
 **Let it snow on your Mac.** Snow falls over every app, piles up on your windows and the Dock, and reacts to what you do.
 
-[![Download](https://img.shields.io/github/v/release/iystoychev/coke-everywhere?label=download&color=e41e2b)](https://github.com/iystoychev/coke-everywhere/releases/latest)
-[![CI](https://github.com/iystoychev/coke-everywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/iystoychev/coke-everywhere/actions/workflows/ci.yml)
+[![Download](https://img.shields.io/github/v/release/iystoychev/snowdesk?label=download&color=2f7fe0)](https://github.com/iystoychev/snowdesk/releases/latest)
+[![CI](https://github.com/iystoychev/snowdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/iystoychev/snowdesk/actions/workflows/ci.yml)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Apple Silicon + Intel](https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-blue)
-[![MIT License](https://img.shields.io/github/license/iystoychev/coke-everywhere)](LICENSE)
+[![MIT License](https://img.shields.io/github/license/iystoychev/snowdesk)](LICENSE)
 
-**[⬇ Download the latest release](https://github.com/iystoychev/coke-everywhere/releases/latest)** · free · no permissions · open source
+**[⬇ Download the latest release](https://github.com/iystoychev/snowdesk/releases/latest)** · free · no permissions · open source
 
 ![Snow piled on two windows and the Dock, Christmas lights along the window tops, icicles under them, frosted screen corners and a sparkle trail behind the cursor](docs/screenshot.png)
 
@@ -50,12 +50,12 @@ It needs **no permissions**: no Screen Recording and no Accessibility. It only r
 
 ### Download
 
-1. Download `CokeEverywhere-<version>.zip` from the [latest release](https://github.com/iystoychev/coke-everywhere/releases/latest). It runs on Apple Silicon and Intel Macs with macOS 13 or newer.
-2. Double-click the zip, then drag **CokeEverywhere** into your Applications folder.
+1. Download `SnowDesk-<version>.zip` from the [latest release](https://github.com/iystoychev/snowdesk/releases/latest). It runs on Apple Silicon and Intel Macs with macOS 13 or newer.
+2. Double-click the zip, then drag **SnowDesk** into your Applications folder.
 3. The first time, open it with **right-click → Open**, then **Open** in the dialog. The app is not notarized by Apple, so a plain double-click only shows a warning the first time. If macOS still refuses, run:
 
    ```bash
-   xattr -dr com.apple.quarantine /Applications/CokeEverywhere.app
+   xattr -dr com.apple.quarantine /Applications/SnowDesk.app
    ```
 
 4. Look for ❄︎ in the menu bar (there is no Dock icon) and turn on **Start at Login** if you want it every day.
@@ -71,50 +71,50 @@ xcode-select --install
 1. Build the app and put it in your Applications folder:
 
    ```bash
-   git clone https://github.com/iystoychev/coke-everywhere.git
-   cd coke-everywhere
+   git clone https://github.com/iystoychev/snowdesk.git
+   cd snowdesk
    make install
    ```
 
-   This builds `CokeEverywhere.app` (signed for this Mac) into `build/` and copies it to `/Applications`.
+   This builds `SnowDesk.app` (signed for this Mac) into `build/` and copies it to `/Applications`.
 
-2. Open **CokeEverywhere** from Applications, Launchpad or Spotlight. It has no Dock icon: look for ❄︎ in the menu bar.
+2. Open **SnowDesk** from Applications, Launchpad or Spotlight. It has no Dock icon: look for ❄︎ in the menu bar.
 
-3. Click ❄︎ and turn on **Start at Login**. From the next login on, macOS starts CokeEverywhere by itself.
+3. Click ❄︎ and turn on **Start at Login**. From the next login on, macOS starts SnowDesk by itself.
 
 ### Update
 
 If you downloaded it, download the new release and replace the app in Applications. If you built it:
 
 ```bash
-cd coke-everywhere
+cd snowdesk
 git pull
 make install
 ```
 
-Then quit CokeEverywhere from the ❄︎ menu and open it again. Start at Login keeps working, because the app stays in the same place.
+Then quit SnowDesk from the ❄︎ menu and open it again. Start at Login keeps working, because the app stays in the same place.
 
 ### Uninstall
 
-1. In the ❄︎ menu, turn off **Start at Login**, then choose **Quit CokeEverywhere**.
-2. Drag **CokeEverywhere** from Applications to the Trash.
+1. In the ❄︎ menu, turn off **Start at Login**, then choose **Quit SnowDesk**.
+2. Drag **SnowDesk** from Applications to the Trash.
 3. Remove the saved settings:
 
    ```bash
-   defaults delete com.iystoychev.CokeEverywhere
+   defaults delete com.iystoychev.SnowDesk
    ```
 
 ### How Start at Login works
 
-It writes a per-user LaunchAgent, `~/Library/LaunchAgents/com.iystoychev.CokeEverywhere.plist`, that opens the app once when you log in. Turning it off deletes the file; nothing else is changed. If you move the app, open it once from the new place and the LaunchAgent follows it.
+It writes a per-user LaunchAgent, `~/Library/LaunchAgents/com.iystoychev.SnowDesk.plist`, that opens the app once when you log in. Turning it off deletes the file; nothing else is changed. If you move the app, open it once from the new place and the LaunchAgent follows it.
 
 ### Make a release
 
-`make release` builds a universal (Apple Silicon + Intel) app and zips it as `build/CokeEverywhere-<version>.zip`. The version comes from `CFBundleShortVersionString` in `packaging/Info.plist`.
+`make release` builds a universal (Apple Silicon + Intel) app and zips it as `build/SnowDesk-<version>.zip`. The version comes from `CFBundleShortVersionString` in `packaging/Info.plist`.
 
 ### Run without installing
 
-For development, `go build -o CokeEverywhere . && ./CokeEverywhere` runs it straight from the terminal. `make test` runs the checks.
+For development, `go build -o SnowDesk . && ./SnowDesk` runs it straight from the terminal. `make test` runs the checks.
 
 ## Use
 
@@ -150,7 +150,7 @@ Only on the main display for now. Help is welcome!
 
 ## Contributing
 
-Ideas, bug reports and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). If CokeEverywhere made you smile, **give it a ⭐** so more people find it, and share a screenshot of your snowy desktop.
+Ideas, bug reports and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). If SnowDesk made you smile, **give it a ⭐** so more people find it, and share a screenshot of your snowy desktop.
 
 ## How it works
 

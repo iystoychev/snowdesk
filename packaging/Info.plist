@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>CokeEverywhere</string>
+	<string>SnowDesk</string>
 	<key>CFBundleDisplayName</key>
-	<string>CokeEverywhere</string>
+	<string>SnowDesk</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.iystoychev.CokeEverywhere</string>
+	<string>com.iystoychev.SnowDesk</string>
 	<key>CFBundleExecutable</key>
-	<string>CokeEverywhere</string>
+	<string>SnowDesk</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>

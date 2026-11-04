@@ -31,11 +31,11 @@ func TestEnableDisable(t *testing.T) {
 		t.Errorf("program path missing or unescaped:\n%s", data)
 	}
 	// Re-enabling points it at a new path, leaving no temp files behind.
-	if err := Enable(home, "/Applications/CokeEverywhere.app/Contents/MacOS/CokeEverywhere"); err != nil {
+	if err := Enable(home, "/Applications/SnowDesk.app/Contents/MacOS/SnowDesk"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(PlistPath(home))
-	if strings.Contains(string(data), "snow &amp; fall") || !strings.Contains(string(data), "/Applications/CokeEverywhere.app/Contents/MacOS/CokeEverywhere") {
+	if strings.Contains(string(data), "snow &amp; fall") || !strings.Contains(string(data), "/Applications/SnowDesk.app/Contents/MacOS/SnowDesk") {
 		t.Errorf("path not updated:\n%s", data)
 	}
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(PlistPath(home)), "*.tmp")); len(left) != 0 {
@@ -47,7 +47,7 @@ func TestEnableDisable(t *testing.T) {
 }
 
 func TestEnableRejectsRelativePath(t *testing.T) {
-	if err := Enable(t.TempDir(), "./CokeEverywhere"); err == nil {
+	if err := Enable(t.TempDir(), "./SnowDesk"); err == nil {
 		t.Error("relative path accepted")
 	}
 }
@@ -59,7 +59,7 @@ func TestPlistIsValid(t *testing.T) {
 		t.Skip("plutil not available")
 	}
 	home := t.TempDir()
-	if err := Enable(home, "/Applications/CokeEverywhere.app/Contents/MacOS/CokeEverywhere"); err != nil {
+	if err := Enable(home, "/Applications/SnowDesk.app/Contents/MacOS/SnowDesk"); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := exec.Command(plutil, "-lint", PlistPath(home)).CombinedOutput(); err != nil {
