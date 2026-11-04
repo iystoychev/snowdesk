@@ -8,7 +8,8 @@ ZIP := build/CokeEverywhere-$(VERSION).zip
 # Build the app bundle in build/.
 app:
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	go build -o $(BIN) .
+	go build -o build/CokeEverywhere-host .
+	cp build/CokeEverywhere-host $(BIN) # cp, not go build -o: BIN may be a universal binary from `make release`
 	cp packaging/Info.plist $(APP)/Contents/Info.plist
 	cp packaging/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	codesign --force --sign - $(APP)
