@@ -1,7 +1,9 @@
 APP := build/CokeEverywhere.app
 BIN := $(APP)/Contents/MacOS/CokeEverywhere
+VERSION := $(shell plutil -extract CFBundleShortVersionString raw packaging/Info.plist)
+ZIP := build/CokeEverywhere-$(VERSION).zip
 
-.PHONY: app install test icon clean
+.PHONY: app install release test icon clean
 
 # Build the app bundle in build/.
 app:
@@ -14,6 +16,15 @@ app:
 # Copy the app into /Applications, updating an older copy in place.
 install: app
 	ditto $(APP) /Applications/CokeEverywhere.app
+
+# Build a universal (Apple Silicon + Intel) app and zip it for a release.
+release: app
+	CGO_ENABLED=1 GOARCH=arm64 CC="clang -arch arm64" go build -o build/CokeEverywhere-arm64 .
+	CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -o build/CokeEverywhere-amd64 .
+	lipo -create -output $(BIN) build/CokeEverywhere-arm64 build/CokeEverywhere-amd64
+	codesign --force --sign - $(APP)
+	ditto -c -k --keepParent $(APP) $(ZIP)
+	@echo "built $(ZIP)"
 
 test:
 	go vet ./...

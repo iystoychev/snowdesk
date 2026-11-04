@@ -23,7 +23,21 @@ It needs **no permissions**: no Screen Recording and no Accessibility. It only r
 
 ## Install
 
-You need macOS on Apple Silicon or Intel, [Go](https://go.dev/dl/) 1.27 or newer, and the Xcode Command Line Tools (cgo needs them for the Cocoa and Metal parts):
+### Download
+
+1. Download `CokeEverywhere-<version>.zip` from the [latest release](https://github.com/iystoychev/coke-everywhere/releases/latest). It runs on Apple Silicon and Intel Macs with macOS 13 or newer.
+2. Double-click the zip, then drag **CokeEverywhere** into your Applications folder.
+3. The first time, open it with **right-click → Open**, then **Open** in the dialog. The app is not notarized by Apple, so a plain double-click only shows a warning the first time. If macOS still refuses, run:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/CokeEverywhere.app
+   ```
+
+4. Look for ❄︎ in the menu bar (there is no Dock icon) and turn on **Start at Login** if you want it every day.
+
+### Build from source
+
+You need [Go](https://go.dev/dl/) 1.27 or newer and the Xcode Command Line Tools (cgo needs them for the Cocoa and Metal parts):
 
 ```bash
 xcode-select --install
@@ -44,6 +58,8 @@ xcode-select --install
 3. Click ❄︎ and turn on **Start at Login**. From the next login on, macOS starts CokeEverywhere by itself.
 
 ### Update
+
+If you downloaded it, download the new release and replace the app in Applications. If you built it:
 
 ```bash
 cd coke-everywhere
@@ -66,6 +82,10 @@ Then quit CokeEverywhere from the ❄︎ menu and open it again. Start at Login 
 ### How Start at Login works
 
 It writes a per-user LaunchAgent, `~/Library/LaunchAgents/com.iystoychev.CokeEverywhere.plist`, that opens the app once when you log in. Turning it off deletes the file; nothing else is changed. If you move the app, open it once from the new place and the LaunchAgent follows it.
+
+### Make a release
+
+`make release` builds a universal (Apple Silicon + Intel) app and zips it as `build/CokeEverywhere-<version>.zip`. The version comes from `CFBundleShortVersionString` in `packaging/Info.plist`.
 
 ### Run without installing
 
