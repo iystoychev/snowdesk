@@ -40,6 +40,7 @@ icon:
 		sips -z $$((s*2)) $$((s*2)) build/icon-1024.png --out build/AppIcon.iconset/icon_$${s}x$${s}@2x.png >/dev/null; \
 	done
 	iconutil -c icns -o packaging/AppIcon.icns build/AppIcon.iconset
+	sips -z 256 256 build/icon-1024.png --out packaging/icon-256.png >/dev/null # README logo
 
 clean:
 	rm -rf ./build

@@ -1,10 +1,35 @@
+<div align="center">
+
+<img src="packaging/icon-256.png" width="128" alt="CokeEverywhere icon">
+
 # CokeEverywhere
 
-Snow for your Mac, in Go. Snow falls over every app, builds up on the top edges of windows and on the Dock, and reacts to what you do:
+**Let it snow on your Mac.** Snow falls over every app, piles up on your windows and the Dock, and reacts to what you do.
+
+[![Download](https://img.shields.io/github/v/release/iystoychev/coke-everywhere?label=download&color=e41e2b)](https://github.com/iystoychev/coke-everywhere/releases/latest)
+[![CI](https://github.com/iystoychev/coke-everywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/iystoychev/coke-everywhere/actions/workflows/ci.yml)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+![Apple Silicon + Intel](https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-blue)
+[![MIT License](https://img.shields.io/github/license/iystoychev/coke-everywhere)](LICENSE)
+
+**[⬇ Download the latest release](https://github.com/iystoychev/coke-everywhere/releases/latest)** · free · no permissions · open source
 
 ![Snow piled on two windows and the Dock, Christmas lights along the window tops, icicles under them, frosted screen corners and a sparkle trail behind the cursor](docs/screenshot.png)
 
 <sub>Preview rendered by the app's own snow engine on a mock desktop.</sub>
+
+</div>
+
+## Why you'll like it
+
+- ❄️ **Snow that sticks.** It piles up on window tops and the Dock, and stays put when you switch desktops or open Mission Control.
+- 🪟 **It reacts.** Resize a window and the snow falls off; fling one and the snow flies off at its speed; sweep the cursor to brush it away.
+- 🎄 **Christmas extras.** Twinkling lights, growing icicles, wind gusts, cursor sparkles, frosted corners and a countdown to Christmas.
+- 🔒 **No permissions, no tracking.** No Screen Recording, no Accessibility, no network. It never sees what's in your windows.
+- 🔋 **Light.** Drawn on the GPU with Metal: about 5% CPU, and videos underneath keep playing smoothly.
+- 🆓 **Free and open source.** MIT licensed. No subscription.
+
+## What it does
 
 - **Resize a window** and its snow falls off.
 - **Fling a window** and its snow flies off at the window's speed.
@@ -109,6 +134,24 @@ The menu also has Start at Login, Pause and Quit.
 
 Snow and icicles on a window survive switching Spaces and minimizing. They only fall when the window closes, is resized, or is flung.
 
+## FAQ
+
+**Is it safe? Why no permission prompts?**
+It only asks macOS where windows are (not what is in them), where the cursor is, and how the Dock is set up. None of that needs Screen Recording or Accessibility, and the app makes no network connections.
+
+**Does it slow down my Mac or drain the battery?**
+It draws everything on the GPU in one pass: the app uses about 5% CPU. Pick **Snow Amount → Light**, or **Pause** from the ❄︎ menu, to save more.
+
+**macOS says the app "cannot be opened".**
+The app is not notarized by Apple. Open it once with **right-click → Open**, or see step 3 of [Download](#download).
+
+**Does it work on multiple displays?**
+Only on the main display for now. Help is welcome!
+
+## Contributing
+
+Ideas, bug reports and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). If CokeEverywhere made you smile, **give it a ⭐** so more people find it, and share a screenshot of your snowy desktop.
+
 ## How it works
 
 - `snow/` is the simulation in plain Go: flakes, piles (one height column every 3 pt along each window's top edge), occlusion by windows in front, shedding, brushing, settings (`sim.go`), the decorations (`decor.go`) and the countdown (`christmas.go`). `go test ./snow/` covers it.
@@ -124,3 +167,7 @@ Snow and icicles on a window survive switching Spaces and minimizing. They only 
 - No icicles under the Dock: its bottom edge is the bottom of the screen.
 - macOS does not expose the Dock's width without Accessibility permission, so the app estimates it from the Dock's item count and icon size. It may be off by an icon or two. When the Dock is hidden or on the side, there is no Dock ledge.
 - The app itself uses about 5% CPU. WindowServer uses roughly 12–15% more while it runs, at any snow amount.
+
+## License
+
+[MIT](LICENSE) © 2026 Ivan Stoychev

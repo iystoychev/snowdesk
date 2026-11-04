@@ -1,0 +1,38 @@
+name: Bug report
+description: Something looks wrong or does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot or recording
+      description: For visual problems, a screenshot or a short screen recording helps a lot.
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: macOS 15.1
+    validations:
+      required: true
+  - type: dropdown
+    id: mac
+    attributes:
+      label: Mac
+      options:
+        - Apple Silicon
+        - Intel
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CokeEverywhere version
+      description: Shown in ❄︎ → About CokeEverywhere.
+      placeholder: "1.0"

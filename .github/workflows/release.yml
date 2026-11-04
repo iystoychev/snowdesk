@@ -1,0 +1,34 @@
+name: Release
+
+# Push a tag like v1.1 to build the universal app and attach it to that
+# release. Bump CFBundleShortVersionString in packaging/Info.plist first.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: make test
+      - name: Build universal app
+        run: make release
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          zip=$(ls build/CokeEverywhere-*.zip)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$zip" --clobber
+          else
+            gh release create "$TAG" "$zip" --title "CokeEverywhere ${TAG#v}" --generate-notes
+          fi

@@ -204,6 +204,11 @@ enum { kInFlight = 3 };
 	// The countdown changes once a day; checking each minute catches midnight.
 	_titleTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(updateTitle) userInfo:nil repeats:YES];
 	NSMenu *m = [NSMenu new];
+	NSMenuItem *about = [m addItemWithTitle:@"About CokeEverywhere" action:@selector(showAbout:) keyEquivalent:@""];
+	about.target = self;
+	NSMenuItem *repo = [m addItemWithTitle:@"CokeEverywhere on GitHub…" action:@selector(openRepo:) keyEquivalent:@""];
+	repo.target = self;
+	[m addItem:NSMenuItem.separatorItem];
 	[m addItem:[self choices:@"Snow Amount" key:@"amount"
 	                  labels:@[ @"Light", @"Normal", @"Heavy", @"Blizzard" ]
 	                  values:@[ @0.4, @1.0, @2.5, @5.0 ]]];
@@ -274,6 +279,29 @@ enum { kInFlight = 3 };
 	[d setBool:on forKey:item.representedObject];
 	item.state = on ? NSControlStateValueOn : NSControlStateValueOff;
 	[self applySettings];
+}
+
+static NSString *const kRepoURL = @"https://github.com/iystoychev/coke-everywhere";
+
+- (void)showAbout:(id)sender {
+	NSMutableAttributedString *credits = [[NSMutableAttributedString alloc]
+		initWithString:@"Snow for your Mac.\n"
+		    attributes:@{NSFontAttributeName : [NSFont systemFontOfSize:11]}];
+	[credits appendAttributedString:[[NSAttributedString alloc]
+		initWithString:kRepoURL
+		    attributes:@{NSLinkAttributeName : [NSURL URLWithString:kRepoURL], NSFontAttributeName : [NSFont systemFontOfSize:11]}]];
+	NSMutableParagraphStyle *center = [NSMutableParagraphStyle new];
+	center.alignment = NSTextAlignmentCenter;
+	[credits addAttribute:NSParagraphStyleAttributeName value:center range:NSMakeRange(0, credits.length)];
+	[NSApp activateIgnoringOtherApps:YES]; // a menu bar app is not active by default
+	[NSApp orderFrontStandardAboutPanelWithOptions:@{
+		NSAboutPanelOptionApplicationName : @"CokeEverywhere",
+		NSAboutPanelOptionCredits : credits,
+	}];
+}
+
+- (void)openRepo:(id)sender {
+	[NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:kRepoURL]];
 }
 
 - (void)toggleLogin:(NSMenuItem *)item {
