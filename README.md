@@ -1,4 +1,4 @@
-# snowfall
+# CokeEverywhere
 
 Snow for your Mac, in Go. Snow falls over every app, builds up on the top edges of windows and on the Dock, and reacts to what you do:
 
@@ -29,46 +29,47 @@ You need macOS on Apple Silicon or Intel, [Go](https://go.dev/dl/) 1.27 or newer
 xcode-select --install
 ```
 
-1. Build it:
+1. Build the app and put it in your Applications folder:
 
    ```bash
    git clone https://github.com/iystoychev/coke-everywhere.git
    cd coke-everywhere
-   go build -o snowfall .
+   make install
    ```
 
-2. Put the binary somewhere permanent. Start at Login remembers this path, so pick the final place first:
+   This builds `CokeEverywhere.app` (signed for this Mac) into `build/` and copies it to `/Applications`.
 
-   ```bash
-   mkdir -p ~/.local/bin
-   cp snowfall ~/.local/bin/
-   ```
+2. Open **CokeEverywhere** from Applications, Launchpad or Spotlight. It has no Dock icon: look for ❄︎ in the menu bar.
 
-3. Start it in the background, so closing the terminal does not stop it:
-
-   ```bash
-   nohup ~/.local/bin/snowfall >/dev/null 2>&1 &
-   ```
-
-4. Click ❄︎ in the menu bar and turn on **Start at Login**. From the next login on, macOS starts snowfall by itself.
+3. Click ❄︎ and turn on **Start at Login**. From the next login on, macOS starts CokeEverywhere by itself.
 
 ### Update
 
-Build again, quit snowfall from the ❄︎ menu, copy the new binary over the old one (step 2), and start it (step 3). Start at Login keeps working, because the path stays the same.
+```bash
+cd coke-everywhere
+git pull
+make install
+```
+
+Then quit CokeEverywhere from the ❄︎ menu and open it again. Start at Login keeps working, because the app stays in the same place.
 
 ### Uninstall
 
-1. In the ❄︎ menu, turn off **Start at Login**, then choose **Quit Snow**.
-2. Remove the binary and the saved settings:
+1. In the ❄︎ menu, turn off **Start at Login**, then choose **Quit CokeEverywhere**.
+2. Drag **CokeEverywhere** from Applications to the Trash.
+3. Remove the saved settings:
 
    ```bash
-   rm ~/.local/bin/snowfall
-   defaults delete snowfall
+   defaults delete com.iystoychev.CokeEverywhere
    ```
 
 ### How Start at Login works
 
-It writes a per-user LaunchAgent, `~/Library/LaunchAgents/local.snowfall.plist`, that runs the binary once when you log in. Turning it off deletes the file; nothing else is changed. If you move the binary, start it once from the new place and the LaunchAgent follows it.
+It writes a per-user LaunchAgent, `~/Library/LaunchAgents/com.iystoychev.CokeEverywhere.plist`, that opens the app once when you log in. Turning it off deletes the file; nothing else is changed. If you move the app, open it once from the new place and the LaunchAgent follows it.
+
+### Run without installing
+
+For development, `go build -o CokeEverywhere . && ./CokeEverywhere` runs it straight from the terminal. `make test` runs the checks.
 
 ## Use
 
@@ -94,6 +95,7 @@ Snow and icicles on a window survive switching Spaces and minimizing. They only 
 - `snow/draw.go` turns each frame into two shapes only: soft colored dots (flakes, bulbs, sparkles, frost crystals) and colored triangles (piles, icicles, light wire, frost). New effects need no renderer changes.
 - `overlay_darwin.m` is the Cocoa side. It has a transparent, click-through window at status-bar level and reads `CGWindowListCopyWindowInfo` for window bounds. It draws with Metal into a single GPU surface: one instanced draw for the dots and one for the triangles. WindowServer only blends that one surface, so video playback underneath keeps running smoothly.
 - `login/` writes and removes the Start at Login LaunchAgent.
+- `packaging/` holds the app's `Info.plist` and icon (`make icon` redraws it from `packaging/icon`). The `Makefile` builds and installs the app.
 - `main.go` connects them. A 60 Hz timer calls the Go `snowStep`, which returns a draw buffer.
 
 ## Limits

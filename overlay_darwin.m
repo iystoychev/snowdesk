@@ -229,7 +229,7 @@ enum { kInFlight = 3 };
 	NSMenuItem *pause = [m addItemWithTitle:@"Pause" action:@selector(togglePause:) keyEquivalent:@"p"];
 	pause.target = self;
 	[m addItem:NSMenuItem.separatorItem];
-	[m addItemWithTitle:@"Quit Snow" action:@selector(terminate:) keyEquivalent:@"q"];
+	[m addItemWithTitle:@"Quit CokeEverywhere" action:@selector(terminate:) keyEquivalent:@"q"];
 	_status.menu = m;
 
 	[self applySettings];
@@ -315,7 +315,7 @@ enum { kInFlight = 3 };
 - (void)setupMetal:(NSView *)v scale:(CGFloat)scale {
 	_device = MTLCreateSystemDefaultDevice();
 	if (!_device) {
-		NSLog(@"snowfall: no Metal device");
+		NSLog(@"CokeEverywhere: no Metal device");
 		exit(1);
 	}
 	_queue = [_device newCommandQueue];
@@ -332,7 +332,7 @@ enum { kInFlight = 3 };
 	NSError *err = nil;
 	id<MTLLibrary> lib = [_device newLibraryWithSource:kShaders options:nil error:&err];
 	if (!lib) {
-		NSLog(@"snowfall: shader compile failed: %@", err);
+		NSLog(@"CokeEverywhere: shader compile failed: %@", err);
 		exit(1);
 	}
 	_dotPipe = [self pipeline:lib vertex:@"dotV" fragment:@"dotF"];
@@ -342,7 +342,7 @@ enum { kInFlight = 3 };
 		_triBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_TRI_FLOATS options:MTLResourceStorageModeShared];
 	}
 	_inflight = dispatch_semaphore_create(kInFlight);
-	_renderQ = dispatch_queue_create("snowfall.render", DISPATCH_QUEUE_SERIAL);
+	_renderQ = dispatch_queue_create("CokeEverywhere.render", DISPATCH_QUEUE_SERIAL);
 }
 
 - (id<MTLRenderPipelineState>)pipeline:(id<MTLLibrary>)lib vertex:(NSString *)vf fragment:(NSString *)ff {
@@ -357,7 +357,7 @@ enum { kInFlight = 3 };
 	NSError *err = nil;
 	id<MTLRenderPipelineState> p = [_device newRenderPipelineStateWithDescriptor:d error:&err];
 	if (!p) {
-		NSLog(@"snowfall: pipeline %@ failed: %@", vf, err);
+		NSLog(@"CokeEverywhere: pipeline %@ failed: %@", vf, err);
 		exit(1);
 	}
 	return p;

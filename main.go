@@ -55,7 +55,7 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil && login.Enabled(home) {
 		// Keep start at login pointing at this binary if it was moved.
 		if err := setLogin(true); err != nil {
-			fmt.Fprintln(os.Stderr, "snowfall: start at login:", err)
+			fmt.Fprintln(os.Stderr, "CokeEverywhere: start at login:", err)
 		}
 	}
 	C.runApp()

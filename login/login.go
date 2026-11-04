@@ -13,7 +13,7 @@ import (
 )
 
 // Label names the LaunchAgent; it is also the plist's file name.
-const Label = "local.snowfall"
+const Label = "com.iystoychev.CokeEverywhere"
 
 // PlistPath is where the LaunchAgent lives for the user with this home dir.
 func PlistPath(home string) string {
