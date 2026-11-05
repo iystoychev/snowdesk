@@ -106,6 +106,37 @@ func TestPileHeightIsCapped(t *testing.T) {
 	}
 }
 
+func TestPilesFormDrifts(t *testing.T) {
+	s := New(1000, 800, 1)
+	b := Rect{100, 300, 600, 300}
+	s.SetWindows([]Window{{ID: 1, Bounds: b}, {ID: 2, Bounds: Rect{100, 700, 600, 50}}}, Rect{}, 0)
+	for range 1500 {
+		dropFlake(s, b.X+s.rng.Float64()*b.W)
+	}
+	p := s.piles[1]
+	lo, hi := maxPile, 0.0
+	for i := 10; i < len(p.cols)-10; i++ { // skip the corner taper
+		if p.cols[i] > p.colMax(i)+1e-9 {
+			t.Fatalf("col %d height %v > cap %v", i, p.cols[i], p.colMax(i))
+		}
+		lo, hi = math.Min(lo, p.cols[i]), math.Max(hi, p.cols[i])
+	}
+	if hi-lo < 3 {
+		t.Errorf("full pile is too even: heights %.1f..%.1f", lo, hi)
+	}
+	// Each window gets its own shape.
+	q := s.piles[2]
+	same := 0
+	for i := 10; i < 100; i++ {
+		if math.Abs(p.colMax(i)-q.colMax(i)) < 0.5 {
+			same++
+		}
+	}
+	if same > 60 {
+		t.Errorf("two windows share a drift shape (%d/90 columns match)", same)
+	}
+}
+
 func filled(id uint32, b Rect, s *Sim) *pile {
 	s.SetWindows([]Window{{ID: id, Bounds: b}}, Rect{}, 0)
 	p := s.piles[id]

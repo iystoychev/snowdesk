@@ -43,6 +43,9 @@ const (
 	settleTime  = 0.05   // a desktop slide counts as over one window update after the last slide step
 	adoptScaled = 30.0   // seconds a same-shape size change may last before it counts as a real resize
 	flingDelay  = 0.2    // a fast move must last this long without being a desktop slide to count as a fling
+	driftMin    = 0.35   // lowest point of a pile, as a share of maxPile
+	driftWide   = 14     // columns between big drifts (~42 pt)
+	driftFine   = 4      // columns between small ripples (~12 pt)
 )
 
 type flake struct {
@@ -62,6 +65,7 @@ type pile struct {
 	flingAt  float64 // window clock when a fast move began; 0 = none pending
 	flingV   Point   // latest speed of that move
 	scaledAt float64 // window clock when Mission Control-style scaling began; 0 = not scaled
+	seed     uint64  // picks this window's drift shape
 }
 
 // Sim is the whole snow state. It is not safe for concurrent use.
@@ -183,7 +187,7 @@ func (s *Sim) SetWindows(ws []Window, dock Rect, dt float64) {
 func (s *Sim) updatePile(id uint32, b Rect, front []Rect, dt float64, calm bool) {
 	p, ok := s.piles[id]
 	if !ok {
-		p = &pile{bounds: b, cols: make([]float64, ncols(b.W))}
+		p = &pile{bounds: b, cols: make([]float64, ncols(b.W)), seed: uint64(id)}
 		if id != DockID { // the Dock's bottom is the screen edge
 			p.icicles = s.newIcicles(b.W)
 		}
@@ -356,11 +360,42 @@ func (p *pile) visible(x float64) bool { return inSpans(p.spans, x) }
 
 func (p *pile) colX(i int) float64 { return p.bounds.X + (float64(i)+0.5)*colW }
 
-// colMax is the height limit for column i; it tapers near the corners so
-// the pile forms a rounded cap.
+// colMax is the height limit for column i. It tapers near the corners so
+// the pile forms a rounded cap, and rises and dips along the edge so the
+// snow settles into drifts instead of an even strip.
 func (p *pile) colMax(i int) float64 {
 	d := math.Min(float64(i)+0.5, float64(len(p.cols)-i)-0.5) * colW
-	return maxPile * math.Min(1, math.Sqrt(math.Max(d, 0)/edgeTaper))
+	return maxPile * p.drift(i) * math.Min(1, math.Sqrt(math.Max(d, 0)/edgeTaper))
+}
+
+// drift is a smooth bumpy profile in [driftMin, 1] for column i: wide
+// drifts (driftWide columns apart) plus small ripples (driftFine apart).
+// It depends only on the window, so a pile keeps its shape as it refills.
+// Slopes stay under settle's 1.5 pt step, so settle never flattens them.
+func (p *pile) drift(i int) float64 {
+	n := 0.8*p.noise(i, driftWide, 0) + 0.2*p.noise(i, driftFine, 1)
+	n = math.Max(0, math.Min(1, (n-0.15)/0.7)) // stretch so peaks reach the full cap
+	return driftMin + (1-driftMin)*n
+}
+
+// noise is value noise in [0,1]: random knots every step columns, eased
+// between.
+func (p *pile) noise(i, step int, octave uint64) float64 {
+	k, t := i/step, float64(i%step)/float64(step)
+	t = t * t * (3 - 2*t)
+	a, b := hash01(p.seed, octave, k), hash01(p.seed, octave, k+1)
+	return a + (b-a)*t
+}
+
+// hash01 maps (seed, octave, k) to a stable pseudo-random value in [0,1).
+func hash01(seed, octave uint64, k int) float64 {
+	x := seed*0x9E3779B97F4A7C15 ^ octave*0xBF58476D1CE4E5B9 ^ uint64(k)*0x94D049BB133111EB
+	x ^= x >> 30
+	x *= 0xBF58476D1CE4E5B9
+	x ^= x >> 27
+	x *= 0x94D049BB133111EB
+	x ^= x >> 31
+	return float64(x>>11) / (1 << 53)
 }
 
 // shed turns columns [from,to) into flakes with base velocity v. With
@@ -485,8 +520,8 @@ func (p *pile) settle(i int) {
 		d := p.cols[j] - p.cols[j+1]
 		if math.Abs(d) > 1.5 {
 			m := (math.Abs(d) - 1.5) / 2 * math.Copysign(1, d)
-			p.cols[j] -= m
-			p.cols[j+1] += m
+			p.cols[j] = math.Min(p.cols[j]-m, p.colMax(j))
+			p.cols[j+1] = math.Min(p.cols[j+1]+m, p.colMax(j+1))
 		}
 	}
 }
