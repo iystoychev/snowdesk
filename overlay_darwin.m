@@ -8,15 +8,19 @@
 #include "overlay_darwin.h"
 #include "_cgo_export.h"
 
-int listWindows(SnowWin *out, int max) {
+int listWindows(SnowWin *out, int max, int *dockUp) {
 	CFArrayRef list = CGWindowListCopyWindowInfo(
 		kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
 	if (!list) return 0;
 	pid_t me = getpid();
+	int dockLevel = CGWindowLevelForKey(kCGDockWindowLevelKey);
+	*dockUp = 0;
 	int n = 0;
 	for (CFIndex i = 0; i < CFArrayGetCount(list) && n < max; i++) {
 		NSDictionary *w = (__bridge NSDictionary *)CFArrayGetValueAtIndex(list, i);
-		if ([w[(id)kCGWindowLayer] intValue] != 0) continue;
+		int layer = [w[(id)kCGWindowLayer] intValue];
+		if (layer == dockLevel && [w[(id)kCGWindowOwnerName] isEqual:@"Dock"]) *dockUp = 1;
+		if (layer != 0) continue;
 		if ([w[(id)kCGWindowOwnerPID] intValue] == me) continue;
 		if ([w[(id)kCGWindowAlpha] doubleValue] < 0.1) continue;
 		CGRect r;
@@ -153,6 +157,39 @@ typedef struct {
 
 enum { kInFlight = 3 };
 
+// CandleView catches the mouse over the candles (the overlay ignores it)
+// and turns drags into snowCandleDrag / snowCandleDrop calls. AppKit keeps
+// sending a drag to the window it started in, so the window can stay put.
+@interface CandleView : NSView
+@property(copy) void (^onDrop)(int corner);
+@end
+
+@implementation CandleView {
+	NSPoint _last;
+}
+- (void)drawRect:(NSRect)r {
+	// Fully clear pixels let clicks through; this is invisible but catches them.
+	[[NSColor colorWithWhite:0 alpha:0.01] setFill];
+	NSRectFill(self.bounds);
+}
+- (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
+- (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.openHandCursor]; }
+- (void)mouseDown:(NSEvent *)e {
+	_last = NSEvent.mouseLocation;
+	[NSCursor.closedHandCursor push];
+}
+- (void)mouseDragged:(NSEvent *)e {
+	NSPoint p = NSEvent.mouseLocation;
+	snowCandleDrag(p.x - _last.x, _last.y - p.y); // flip y: the sim's origin is top-left
+	_last = p;
+}
+- (void)mouseUp:(NSEvent *)e {
+	[NSCursor pop];
+	int corner = snowCandleDrop();
+	if (self.onDrop) self.onDrop(corner);
+}
+@end
+
 @interface SnowController : NSObject
 @end
 
@@ -171,6 +208,8 @@ enum { kInFlight = 3 };
 	NSTimer *_timer, *_titleTimer;
 	CFTimeInterval _last;
 	NSStatusItem *_status;
+	NSPanel *_candles; // mouse catcher over the candles
+	BOOL _full;        // a fullscreen app is showing
 }
 
 - (void)start {
@@ -196,7 +235,9 @@ enum { kInFlight = 3 };
 	NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
 	[d registerDefaults:@{
 		@"amount" : @1.0, @"size" : @1.0, @"opacity" : @1.0, @"piles" : @YES,
-		@"lights" : @YES, @"icicles" : @YES, @"wind" : @YES, @"sparkles" : @YES, @"frost" : @YES
+		@"lights" : @YES, @"icicles" : @YES, @"wind" : @YES, @"sparkles" : @YES, @"frost" : @YES,
+		@"stars" : @NO, @"fireflies" : @NO, @"leaves" : @NO,
+		@"candles" : @NO, @"candleCorner" : @0
 	}];
 
 	_status = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
@@ -226,6 +267,11 @@ enum { kInFlight = 3 };
 	[decor.submenu addItem:[self toggle:@"Wind Gusts" key:@"wind"]];
 	[decor.submenu addItem:[self toggle:@"Cursor Sparkles" key:@"sparkles"]];
 	[decor.submenu addItem:[self toggle:@"Frosted Corners" key:@"frost"]];
+	[decor.submenu addItem:NSMenuItem.separatorItem];
+	[decor.submenu addItem:[self toggle:@"Shooting Stars" key:@"stars"]];
+	[decor.submenu addItem:[self toggle:@"Fireflies" key:@"fireflies"]];
+	[decor.submenu addItem:[self toggle:@"Falling Leaves" key:@"leaves"]];
+	[decor.submenu addItem:[self toggle:@"Candles (drag to any corner)" key:@"candles"]];
 	[m addItem:decor];
 	[m addItem:NSMenuItem.separatorItem];
 	NSMenuItem *loginItem = [m addItemWithTitle:@"Start at Login" action:@selector(toggleLogin:) keyEquivalent:@""];
@@ -330,8 +376,46 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 		.wind = [d boolForKey:@"wind"],
 		.sparkles = [d boolForKey:@"sparkles"],
 		.frost = [d boolForKey:@"frost"],
+		.stars = [d boolForKey:@"stars"],
+		.fireflies = [d boolForKey:@"fireflies"],
+		.leaves = [d boolForKey:@"leaves"],
+		.candles = [d boolForKey:@"candles"],
+		.candleCorner = (int)[d integerForKey:@"candleCorner"],
 	});
+	[self placeCandles];
 	_opacity = [d doubleForKey:@"opacity"];
+}
+
+// placeCandles puts the mouse catcher where the candles rest, or hides it.
+- (void)placeCandles {
+	SnowWin r;
+	if (!_timer || !snowCandleRect(&r)) {
+		[_candles orderOut:nil];
+		return;
+	}
+	if (!_candles) {
+		_candles = [[NSPanel alloc] initWithContentRect:NSZeroRect
+		                                      styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+		                                        backing:NSBackingStoreBuffered
+		                                          defer:NO];
+		_candles.opaque = NO;
+		_candles.backgroundColor = NSColor.clearColor;
+		_candles.hasShadow = NO;
+		_candles.level = NSStatusWindowLevel;
+		_candles.collectionBehavior = _win.collectionBehavior;
+		_candles.becomesKeyOnlyIfNeeded = YES;
+		CandleView *v = [CandleView new];
+		__weak SnowController *me = self;
+		v.onDrop = ^(int corner) {
+			[NSUserDefaults.standardUserDefaults setInteger:corner forKey:@"candleCorner"];
+			[me placeCandles];
+		};
+		_candles.contentView = v;
+	}
+	CGFloat h = NSScreen.screens.firstObject.frame.size.height;
+	[_candles setFrame:NSMakeRect(r.x, h - r.y - r.h, r.w, r.h) display:YES];
+	[_candles.contentView.window invalidateCursorRectsForView:_candles.contentView];
+	[_candles orderFrontRegardless];
 }
 
 - (void)updateTitle {
@@ -396,6 +480,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	_timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(tick:) userInfo:nil repeats:YES];
 	[NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
 	[_win orderFrontRegardless];
+	[self placeCandles];
 }
 
 - (void)togglePause:(NSMenuItem *)item {
@@ -403,6 +488,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 		[_timer invalidate];
 		_timer = nil;
 		[_win orderOut:nil];
+		[self placeCandles];
 		item.title = @"Resume";
 	} else {
 		[self resume];
@@ -417,6 +503,11 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 
 	int nd = 0, nt = 0;
 	float *b = snowStep(dt, &nd, &nt); // dots at b, triangles at b + SNOW_DOT_FLOATS
+	BOOL full = snowFullscreen();
+	if (full != _full) { // hide or bring back the candle mouse catcher
+		_full = full;
+		[self placeCandles];
+	}
 
 	BOOL empty = nd == 0 && nt == 0;
 	if (empty && _wasEmpty) return; // nothing to draw, surface already clear

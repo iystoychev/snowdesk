@@ -19,7 +19,8 @@ typedef struct {
 
 typedef struct {
 	double amount, size;
-	int piles, lights, icicles, wind, sparkles, frost;
+	int piles, lights, icicles, wind, sparkles, frost, stars, fireflies, leaves;
+	int candles, candleCorner; // corner: 0 bottom left, 1 bottom right, 2 top left, 3 top right
 } SnowSettings;
 
 // runApp starts the Cocoa app and never returns. Call on the main thread.
@@ -27,7 +28,9 @@ void runApp(void);
 
 // listWindows fills out with normal on-screen windows, front to back,
 // excluding our own. Returns how many were written.
-int listWindows(SnowWin *out, int max);
+// *dockUp is set to 1 if the Dock's window is on screen; it is not in a
+// fullscreen app's Space.
+int listWindows(SnowWin *out, int max, int *dockUp);
 
 // windowsExist sets exists[i] to 1 if window ids[i] still exists anywhere
 // (another Space, minimized), else 0.

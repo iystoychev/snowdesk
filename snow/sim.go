@@ -43,6 +43,7 @@ const (
 	settleTime  = 0.05   // a desktop slide counts as over one window update after the last slide step
 	adoptScaled = 30.0   // seconds a same-shape size change may last before it counts as a real resize
 	flingDelay  = 0.2    // a fast move must last this long without being a desktop slide to count as a fling
+	fullTop     = 50.0   // a fullscreen window's top is at most this far down (notch strip)
 	driftMin    = 0.35   // lowest point of a pile, as a share of maxPile
 	driftWide   = 14     // columns between big drifts (~42 pt)
 	driftFine   = 4      // columns between small ripples (~12 pt)
@@ -71,6 +72,7 @@ type pile struct {
 // Sim is the whole snow state. It is not safe for concurrent use.
 type Sim struct {
 	W, H     float64
+	DockGone bool // the Dock's window is not on screen, as in a fullscreen app's Space
 	cfg      Settings
 	flakes   []flake
 	piles    map[uint32]*pile
@@ -86,19 +88,30 @@ type Sim struct {
 	crystals                   [4][]crystal
 	winClock                   float64 // seconds of window updates (sum of SetWindows dt)
 	settleUntil                float64 // a desktop slide is under way until winClock reaches this
-
+	stars                      []star
+	starNext                   float64 // sim time of the next shooting star
+	flies                      []firefly
+	leaves                     []leaf
+	leafAcc                    float64
+	candle                     candles
+	full                       bool // a fullscreen app is showing: draw nothing
 }
 
 // Settings are the user-adjustable knobs.
 type Settings struct {
-	Amount   float64 // snowfall multiplier; 1 = normal (90 flakes/s, 400 on screen)
-	Size     float64 // flake radius multiplier; 1 = normal
-	Piles    bool    // snow builds up on windows and the Dock
-	Lights   bool    // Christmas lights along window top edges
-	Icicles  bool    // icicles grow under window bottom edges
-	Wind     bool    // gusts blow the snow sideways now and then
-	Sparkles bool    // the cursor leaves a trail of glints
-	Frost    bool    // frost creeps in from the screen corners
+	Amount       float64 // snowfall multiplier; 1 = normal (90 flakes/s, 400 on screen)
+	Size         float64 // flake radius multiplier; 1 = normal
+	Piles        bool    // snow builds up on windows and the Dock
+	Lights       bool    // Christmas lights along window top edges
+	Icicles      bool    // icicles grow under window bottom edges
+	Wind         bool    // gusts blow the snow sideways now and then
+	Sparkles     bool    // the cursor leaves a trail of glints
+	Frost        bool    // frost creeps in from the screen corners
+	Stars        bool    // shooting stars streak across now and then
+	Fireflies    bool    // glowing fireflies wander the screen
+	Leaves       bool    // autumn leaves tumble down
+	Candles      bool    // candles in a screen corner; drag them to another one
+	CandleCorner int     // BottomLeft, BottomRight, TopLeft or TopRight
 }
 
 func DefaultSettings() Settings {
@@ -131,6 +144,7 @@ func (s *Sim) PileIDs() []uint32 {
 func (s *Sim) Configure(c Settings) {
 	c.Amount = math.Max(0, math.Min(c.Amount, float64(hardCap)/flakeCap))
 	c.Size = math.Max(0.1, c.Size)
+	c.CandleCorner = max(BottomLeft, min(c.CandleCorner, TopRight))
 	if s.cfg.Piles && !c.Piles {
 		for _, p := range s.piles {
 			s.shed(p, 0, len(p.cols), Point{}, true)
@@ -155,7 +169,15 @@ func (s *Sim) SetWindows(ws []Window, dock Rect, dt float64) {
 	calm := s.Sliding()
 	// The Dock sits above every window, so it is the front-most occluder.
 	occluders := make([]Rect, 0, len(ws)+1)
-	if dock.W > 0 {
+	s.full = s.fullscreen(ws)
+	switch {
+	case dock.W > 0 && s.full:
+		// A fullscreen app hides the Dock: keep its snow for later, unseen.
+		if p, ok := s.piles[DockID]; ok {
+			p.seen, p.hidden = true, true
+			p.spans, p.bottom = nil, nil
+		}
+	case dock.W > 0:
 		s.updatePile(DockID, dock, nil, dt, calm)
 		occluders = append(occluders, dock)
 	}
@@ -183,6 +205,28 @@ func (s *Sim) SetWindows(ws []Window, dock Rect, dt float64) {
 		}
 	}
 }
+
+// fullscreen reports whether a visible window covers the whole screen, as
+// a fullscreen app does (it hides the Dock and the menu bar).
+// On a Mac with a notch the window starts below the notch strip, so its
+// top may be up to fullTop down. A zoomed window with an auto-hidden Dock
+// fills the same space, but the Dock's window is still there.
+func (s *Sim) fullscreen(ws []Window) bool {
+	if !s.DockGone {
+		return false
+	}
+	for _, w := range ws {
+		b := w.Bounds
+		if !w.Hidden && b.X <= 0 && b.Y <= fullTop && b.X+b.W >= s.W && b.Y+b.H >= s.H {
+			return true
+		}
+	}
+	return false
+}
+
+// Fullscreen reports whether a fullscreen app was showing at the last
+// SetWindows. Nothing is drawn then.
+func (s *Sim) Fullscreen() bool { return s.full }
 
 func (s *Sim) updatePile(id uint32, b Rect, front []Rect, dt float64, calm bool) {
 	p, ok := s.piles[id]
@@ -437,6 +481,8 @@ func (s *Sim) Step(dt float64, cursor Point) {
 	s.stepSparkles(dt, s.lastCur, cursor)
 	s.stepFrost(dt, cursor)
 	s.growIcicles(dt)
+	s.stepExtras(dt, cursor, cv)
+	s.stepCandles(dt, cursor)
 	k := math.Exp(-drag * dt)
 	live := s.flakes[:0]
 	for _, f := range s.flakes {

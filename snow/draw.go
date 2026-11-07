@@ -45,15 +45,20 @@ func (f *frame) quad(ax, ay, bx, by, cx, cy, dx, dy float64, c rgba) {
 // Fill writes the current frame: dots into dots, triangle vertices into
 // tris. It returns how many floats it wrote to each.
 func (s *Sim) Fill(dots, tris []float32) (nd, nt int) {
+	if s.full {
+		return 0, 0 // stay out of the way of fullscreen apps
+	}
 	f := &frame{dots: dots, tris: tris}
 	s.drawFrost(f)
 	s.drawPiles(f)
 	s.drawIcicles(f)
 	s.drawLights(f)
+	s.drawCandles(f)
 	snow := rgba{1, 1, 1, 0.95}
 	for _, fl := range s.flakes {
 		f.dot(fl.x, fl.y, fl.r*s.cfg.Size, 0.55, snow)
 	}
+	s.drawExtras(f)
 	s.drawSparkles(f)
 	return f.nd, f.nt
 }

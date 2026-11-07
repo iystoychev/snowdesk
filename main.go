@@ -63,7 +63,9 @@ func main() {
 
 // refresh feeds window and Dock geometry into the simulation.
 func refresh(dt float64) {
-	n := int(C.listWindows(&wins[0], maxWindows))
+	var dockUp C.int
+	n := int(C.listWindows(&wins[0], maxWindows, &dockUp))
+	sim.DockGone = dockUp == 0
 	ws := make([]snow.Window, n)
 	onScreen := make(map[uint32]bool, n)
 	for i, w := range wins[:n] {
@@ -99,8 +101,44 @@ func snowConfigure(c C.SnowSettings) {
 		Amount: float64(c.amount), Size: float64(c.size), Piles: c.piles != 0,
 		Lights: c.lights != 0, Icicles: c.icicles != 0, Wind: c.wind != 0,
 		Sparkles: c.sparkles != 0, Frost: c.frost != 0,
+		Stars: c.stars != 0, Fireflies: c.fireflies != 0, Leaves: c.leaves != 0,
+		Candles: c.candles != 0, CandleCorner: int(c.candleCorner),
 	})
 }
+
+// snowCandleRect sets *r to where the candles rest (top-left origin) and
+// returns 1, or returns 0 when candles are off.
+//
+//export snowCandleRect
+func snowCandleRect(r *C.SnowWin) C.int {
+	b, ok := sim.CandleRect()
+	if !ok {
+		return 0
+	}
+	r.x, r.y, r.w, r.h = C.double(b.X), C.double(b.Y), C.double(b.W), C.double(b.H)
+	return 1
+}
+
+// snowFullscreen reports whether a fullscreen app is showing; the overlay
+// draws nothing then and hides the candle mouse catcher.
+//
+//export snowFullscreen
+func snowFullscreen() C.int {
+	if sim.Fullscreen() {
+		return 1
+	}
+	return 0
+}
+
+// snowCandleDrag moves the candles while the user drags them.
+//
+//export snowCandleDrag
+func snowCandleDrag(dx, dy C.double) { sim.DragCandles(float64(dx), float64(dy)) }
+
+// snowCandleDrop ends a drag and returns the corner the candles go to.
+//
+//export snowCandleDrop
+func snowCandleDrop() C.int { return C.int(sim.DropCandles()) }
 
 // snowTitle returns the menu bar title with the Christmas countdown. The
 // caller frees it.

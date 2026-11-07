@@ -35,13 +35,17 @@
 - **Fling a window** and its snow flies off at the window's speed.
 - **Run the cursor along a pile** to brush the snow off, including off the Dock.
 
-Christmas decorations come with it:
+Decorations come with it. Shooting stars, fireflies, leaves and candles are off by default; turn them on in the menu.
 
 - **Christmas lights** hang in sagging strings along each window's top edge and twinkle in a chasing pattern. They start after the window's traffic-light buttons.
 - **Icicles** slowly grow under each window's bottom edge. A resize or fling snaps them off.
 - **Wind gusts** blow all the snow sideways every so often.
 - **Cursor sparkles**: moving the mouse leaves a short trail of glints.
 - **Frosted corners**: frost creeps in from the screen corners over a few minutes, and melts when the cursor goes near.
+- **Shooting stars** streak across the top of the screen every few seconds.
+- **Fireflies** wander and blink, and dart away from the cursor.
+- **Falling leaves** tumble down in autumn colors, sway in the wind, and get batted away by the cursor.
+- **Candles**: three flickering candles on a brass dish with holly. Drag them anywhere and they glide to the nearest screen corner.
 - **Countdown**: the menu bar item shows the days left until Christmas ("❄︎ 50d"), and a tree on the day.
 
 It needs **no permissions**: no Screen Recording and no Accessibility. It only reads window positions (never titles or contents), the cursor position, and the Dock's preferences.
@@ -128,11 +132,11 @@ The ❄︎ menu bar item holds the settings. They are saved, so they stay after 
 | Flake Size | Small, Normal, Large |
 | Opacity | 40%, 70%, 100% |
 | Pile Up on Windows | on / off (off drops all piled snow) |
-| Decorations | Christmas Lights, Icicles, Wind Gusts, Cursor Sparkles, Frosted Corners — each on / off |
+| Decorations | Christmas Lights, Icicles, Wind Gusts, Cursor Sparkles, Frosted Corners (on by default); Shooting Stars, Fireflies, Falling Leaves, Candles (off by default) — each on / off |
 
 The menu also has Start at Login, Pause and Quit.
 
-Snow and icicles on a window survive switching Spaces and minimizing. They only fall when the window closes, is resized, or is flung.
+Snow and icicles on a window survive switching Spaces and minimizing. They only fall when the window closes, is resized, or is flung. While an app is fullscreen, SnowDesk hides everything and brings it back when you leave.
 
 ## FAQ
 

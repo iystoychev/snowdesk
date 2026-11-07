@@ -137,6 +137,79 @@ func TestPilesFormDrifts(t *testing.T) {
 	}
 }
 
+func TestFullscreenHidesDockSnow(t *testing.T) {
+	s := New(1000, 800, 1)
+	dock := Rect{300, 740, 400, 60}
+	s.SetWindows(nil, dock, 0)
+	for i := range s.piles[DockID].cols {
+		s.piles[DockID].cols[i] = 5
+	}
+	full := []Window{{ID: 7, Bounds: Rect{0, 0, 1000, 800}}}
+	s.DockGone = true
+	s.SetWindows(full, dock, 1.0/60)
+	p := s.piles[DockID]
+	if p == nil || len(p.spans) != 0 {
+		t.Fatalf("Dock pile should be kept but hidden in fullscreen, got %+v", p)
+	}
+	if len(s.flakes) != 0 {
+		t.Errorf("Dock snow fell off on entering fullscreen: %d flakes", len(s.flakes))
+	}
+	s.DockGone = false
+	s.SetWindows(nil, dock, 1.0/60)
+	if len(s.piles[DockID].spans) == 0 || total(s.piles[DockID]) == 0 {
+		t.Error("Dock snow did not come back after leaving fullscreen")
+	}
+}
+
+func TestFullscreenHidesEverything(t *testing.T) {
+	s := New(1000, 800, 1)
+	c := s.cfg
+	c.Candles, c.Leaves = true, true
+	s.Configure(c)
+	win := []Window{{ID: 1, Bounds: Rect{100, 300, 400, 300}}}
+	s.SetWindows(win, Rect{}, 0)
+	for range 120 {
+		s.Step(1.0/60, Point{-1000, -1000})
+	}
+	dots, tris := make([]float32, 1<<14), make([]float32, 1<<18)
+	if nd, nt := s.Fill(dots, tris); nd == 0 || nt == 0 {
+		t.Fatal("nothing drawn before going fullscreen")
+	}
+	// On a Mac with a notch a fullscreen window starts below the notch strip.
+	s.DockGone = true
+	s.SetWindows([]Window{{ID: 7, Bounds: Rect{0, 33, 1000, 767}}}, Rect{}, 1.0/60)
+	if nd, nt := s.Fill(dots, tris); nd != 0 || nt != 0 {
+		t.Errorf("fullscreen still draws %d dot and %d triangle floats", nd, nt)
+	}
+	if _, ok := s.CandleRect(); ok {
+		t.Error("candle mouse catcher stays up in fullscreen")
+	}
+	s.DockGone = false
+	s.SetWindows(win, Rect{}, 1.0/60)
+	if nd, _ := s.Fill(dots, tris); nd == 0 {
+		t.Error("nothing drawn after leaving fullscreen")
+	}
+	if _, ok := s.CandleRect(); !ok {
+		t.Error("candles did not come back after fullscreen")
+	}
+}
+
+func TestZoomedWindowIsNotFullscreen(t *testing.T) {
+	s := New(1000, 800, 1)
+	// Zoomed to fill the screen under the menu bar, Dock auto-hidden: the
+	// Dock's window is still up, so this is not fullscreen.
+	s.SetWindows([]Window{{ID: 1, Bounds: Rect{0, 33, 1000, 767}}}, Rect{}, 0)
+	if s.Fullscreen() {
+		t.Error("a zoomed window counts as fullscreen")
+	}
+	// A window that only reaches part way down is not fullscreen either.
+	s.DockGone = true
+	s.SetWindows([]Window{{ID: 1, Bounds: Rect{0, 33, 1000, 600}}}, Rect{}, 0)
+	if s.Fullscreen() {
+		t.Error("a window short of the bottom counts as fullscreen")
+	}
+}
+
 func filled(id uint32, b Rect, s *Sim) *pile {
 	s.SetWindows([]Window{{ID: id, Bounds: b}}, Rect{}, 0)
 	p := s.piles[id]

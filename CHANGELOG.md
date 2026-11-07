@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1 — 2026-11-07
+
+- Snow piles into uneven drifts instead of an even strip; each window gets its own shape.
+- New decorations, each off by default: shooting stars, fireflies that dodge the cursor, falling autumn leaves, and candles on a brass dish with holly that you drag to any screen corner.
+- Everything hides while an app is fullscreen, including on Macs with a notch, and comes back when you leave.
+
 ## 1.0 — 2026-11-05
 
 First release.
