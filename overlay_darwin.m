@@ -4,6 +4,7 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #import <Metal/Metal.h>
+#import <Carbon/Carbon.h> // RegisterEventHotKey: a global shortcut that needs no permission
 #include <unistd.h>
 #include "overlay_darwin.h"
 #include "_cgo_export.h"
@@ -107,17 +108,33 @@ static CGRect estimateDock(NSScreen *s) {
 	return CGRectMake((W - w) / 2, s.frame.size.height - inset, w, inset);
 }
 
-void screenInfo(SnowScreen *out) {
-	NSScreen *s = NSScreen.screens.firstObject;
-	CGRect d = estimateDock(s);
-	*out = (SnowScreen){s.frame.size.width, s.frame.size.height,
-	                    d.origin.x, d.origin.y, d.size.width, d.size.height};
+static unsigned int screenID(NSScreen *s) {
+	return [s.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+}
+
+int screensInfo(SnowScreen *out, int max) {
+	NSArray<NSScreen *> *all = NSScreen.screens;
+	if (all.count == 0) return 0;
+	double mainH = all.firstObject.frame.size.height;
+	int n = 0;
+	for (NSScreen *s in all) {
+		if (n >= max) break;
+		NSRect f = s.frame;
+		CGRect d = n == 0 ? estimateDock(s) : CGRectZero;
+		out[n++] = (SnowScreen){screenID(s), f.origin.x, mainH - NSMaxY(f), f.size.width, f.size.height,
+		                        d.origin.x, d.origin.y, d.size.width, d.size.height};
+	}
+	return n;
 }
 
 void cursorPos(double *x, double *y) {
 	NSPoint p = NSEvent.mouseLocation;
 	*x = p.x;
 	*y = NSScreen.screens.firstObject.frame.size.height - p.y;
+}
+
+int optionDown(void) {
+	return (NSEvent.modifierFlags & NSEventModifierFlagOption) != 0;
 }
 
 // Everything is drawn on the GPU with Metal into one surface. Earlier
@@ -157,6 +174,138 @@ typedef struct {
 
 enum { kInFlight = 3 };
 
+static const NSWindowCollectionBehavior kBehavior =
+	NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary |
+	NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorIgnoresCycle;
+
+// Overlay is the transparent, click-through window over one screen, with
+// its own Metal surface and buffers. Metal drawing happens on its own
+// queue, off the main thread.
+@interface Overlay : NSObject
+@property(readonly) NSWindow *win;
+@property unsigned int displayID;
+@end
+
+@implementation Overlay {
+	CAMetalLayer *_layer;
+	id<MTLDevice> _device;
+	id<MTLCommandQueue> _queue;
+	id<MTLRenderPipelineState> _dotPipe, _triPipe;
+	id<MTLBuffer> _dotBuf[kInFlight], _triBuf[kInFlight];
+	dispatch_semaphore_t _inflight;
+	dispatch_queue_t _renderQ;
+	int _slot;
+	BOOL _wasEmpty;
+}
+
+- (instancetype)initWithScreen:(NSScreen *)s device:(id<MTLDevice>)dev queue:(id<MTLCommandQueue>)q
+                       dotPipe:(id<MTLRenderPipelineState>)dp triPipe:(id<MTLRenderPipelineState>)tp {
+	if (!(self = [super init])) return nil;
+	_device = dev, _queue = q, _dotPipe = dp, _triPipe = tp;
+	_displayID = screenID(s);
+	_win = [[NSWindow alloc] initWithContentRect:s.frame
+	                                   styleMask:NSWindowStyleMaskBorderless
+	                                     backing:NSBackingStoreBuffered
+	                                       defer:NO];
+	_win.opaque = NO;
+	_win.backgroundColor = NSColor.clearColor;
+	_win.hasShadow = NO;
+	_win.ignoresMouseEvents = YES;
+	_win.level = NSStatusWindowLevel;
+	_win.collectionBehavior = kBehavior;
+	_win.releasedWhenClosed = NO;
+	NSView *v = _win.contentView;
+	v.wantsLayer = YES;
+	_layer = [CAMetalLayer layer];
+	_layer.device = _device;
+	_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+	_layer.opaque = NO;
+	_layer.framebufferOnly = YES;
+	[v.layer addSublayer:_layer];
+	for (int i = 0; i < kInFlight; i++) {
+		_dotBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_DOT_FLOATS options:MTLResourceStorageModeShared];
+		_triBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_TRI_FLOATS options:MTLResourceStorageModeShared];
+	}
+	_inflight = dispatch_semaphore_create(kInFlight);
+	_renderQ = dispatch_queue_create("SnowDesk.render", DISPATCH_QUEUE_SERIAL);
+	[self fitScreen:s];
+	return self;
+}
+
+// fitScreen keeps the window and surface the size of screen s.
+- (void)fitScreen:(NSScreen *)s {
+	if (!NSEqualRects(_win.frame, s.frame)) [_win setFrame:s.frame display:NO];
+	CGFloat scale = s.backingScaleFactor;
+	NSRect b = _win.contentView.bounds;
+	CGSize px = CGSizeMake(b.size.width * scale, b.size.height * scale);
+	if (!CGSizeEqualToSize(_layer.drawableSize, px) || _layer.contentsScale != scale) {
+		[CATransaction begin];
+		[CATransaction setDisableActions:YES];
+		_layer.frame = b;
+		_layer.contentsScale = scale;
+		_layer.drawableSize = px;
+		[CATransaction commit];
+	}
+}
+
+// draw copies one frame from b (dots, then triangles at SNOW_DOT_FLOATS)
+// and renders it. b may be reused as soon as this returns.
+- (void)draw:(const float *)b dots:(int)nd tris:(int)nt opacity:(float)opacity {
+	BOOL empty = nd == 0 && nt == 0;
+	if (empty && _wasEmpty) return; // nothing to draw, surface already clear
+	// Never block the main thread on the GPU: skip the frame if it is behind.
+	if (dispatch_semaphore_wait(_inflight, DISPATCH_TIME_NOW) != 0) return;
+	_wasEmpty = empty;
+	_slot = (_slot + 1) % kInFlight;
+	int slot = _slot;
+	memcpy(_dotBuf[slot].contents, b, sizeof(float) * nd);
+	memcpy(_triBuf[slot].contents, b + SNOW_DOT_FLOATS, sizeof(float) * nt);
+	CGSize sz = _win.contentView.bounds.size; // points, top-left origin in the shader
+	Uniforms u = {sz.width, sz.height, opacity, 0};
+	// Waiting for a drawable can block for most of a second while macOS
+	// switches desktops; do it off the main thread so the app never freezes.
+	dispatch_async(_renderQ, ^{
+		[self renderSlot:slot dots:nd tris:nt uniforms:u];
+	});
+}
+
+// renderSlot draws one frame from buffer slot on the render queue.
+- (void)renderSlot:(int)slot dots:(int)nd tris:(int)nt uniforms:(Uniforms)u {
+	id<CAMetalDrawable> drawable = [_layer nextDrawable];
+	if (!drawable) {
+		dispatch_semaphore_signal(_inflight);
+		return;
+	}
+	MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
+	rp.colorAttachments[0].texture = drawable.texture;
+	rp.colorAttachments[0].loadAction = MTLLoadActionClear;
+	rp.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+	rp.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+	id<MTLCommandBuffer> cb = [_queue commandBuffer];
+	id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
+	[enc setVertexBytes:&u length:sizeof u atIndex:1];
+	[enc setFragmentBytes:&u length:sizeof u atIndex:0];
+	if (nt > 0) { // triangles first: dots (bulbs, flakes) sit on top
+		[enc setRenderPipelineState:_triPipe];
+		[enc setVertexBuffer:_triBuf[slot] offset:0 atIndex:0];
+		[enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:nt / 6];
+	}
+	if (nd > 0) {
+		[enc setRenderPipelineState:_dotPipe];
+		[enc setVertexBuffer:_dotBuf[slot] offset:0 atIndex:0];
+		[enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:nd / 8];
+	}
+	[enc endEncoding];
+	dispatch_semaphore_t sem = _inflight;
+	[cb addCompletedHandler:^(id<MTLCommandBuffer> _) {
+		dispatch_semaphore_signal(sem);
+	}];
+	[cb presentDrawable:drawable];
+	[cb commit];
+}
+@end
+
 // CandleView catches the mouse over the candles (the overlay ignores it)
 // and turns drags into snowCandleDrag / snowCandleDrop calls. AppKit keeps
 // sending a drag to the window it started in, so the window can stay put.
@@ -190,54 +339,36 @@ enum { kInFlight = 3 };
 }
 @end
 
-@interface SnowController : NSObject
+@interface SnowController : NSObject <NSApplicationDelegate>
+- (void)popUpMenu;
 @end
 
 @implementation SnowController {
-	NSWindow *_win;
-	CAMetalLayer *_layer;
+	NSMutableDictionary<NSNumber *, Overlay *> *_overlays; // by display ID
 	id<MTLDevice> _device;
 	id<MTLCommandQueue> _queue;
 	id<MTLRenderPipelineState> _dotPipe, _triPipe;
-	id<MTLBuffer> _dotBuf[kInFlight], _triBuf[kInFlight];
-	dispatch_semaphore_t _inflight;
-	dispatch_queue_t _renderQ; // Metal drawing happens here, off the main thread
-	int _slot;
-	BOOL _wasEmpty;
 	float _opacity;
 	NSTimer *_timer, *_titleTimer;
 	CFTimeInterval _last;
 	NSStatusItem *_status;
+	NSMenu *_menu;
+	EventHotKeyRef _hotKey;
 	NSPanel *_candles; // mouse catcher over the candles
 	BOOL _full;        // a fullscreen app is showing
 }
 
 - (void)start {
-	NSScreen *s = NSScreen.screens.firstObject;
-	_win = [[NSWindow alloc] initWithContentRect:s.frame
-	                                   styleMask:NSWindowStyleMaskBorderless
-	                                     backing:NSBackingStoreBuffered
-	                                       defer:NO];
-	_win.opaque = NO;
-	_win.backgroundColor = NSColor.clearColor;
-	_win.hasShadow = NO;
-	_win.ignoresMouseEvents = YES;
-	_win.level = NSStatusWindowLevel;
-	_win.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
-	                          NSWindowCollectionBehaviorStationary |
-	                          NSWindowCollectionBehaviorFullScreenAuxiliary |
-	                          NSWindowCollectionBehaviorIgnoresCycle;
-
-	NSView *v = _win.contentView;
-	v.wantsLayer = YES;
-	[self setupMetal:v scale:s.backingScaleFactor];
+	_overlays = [NSMutableDictionary new];
+	[self setupMetal];
 
 	NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
 	[d registerDefaults:@{
 		@"amount" : @1.0, @"size" : @1.0, @"opacity" : @1.0, @"piles" : @YES,
 		@"lights" : @YES, @"icicles" : @YES, @"wind" : @YES, @"sparkles" : @YES, @"frost" : @YES,
 		@"stars" : @NO, @"fireflies" : @NO, @"leaves" : @NO,
-		@"candles" : @NO, @"candleCorner" : @0
+		@"candles" : @NO, @"candleCorner" : @0,
+		@"forest" : @YES, @"xmasTree" : @YES, @"santa" : @YES
 	}];
 
 	_status = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
@@ -273,6 +404,18 @@ enum { kInFlight = 3 };
 	[decor.submenu addItem:[self toggle:@"Falling Leaves" key:@"leaves"]];
 	[decor.submenu addItem:[self toggle:@"Candles (drag to any corner)" key:@"candles"]];
 	[m addItem:decor];
+	NSMenuItem *scene = [[NSMenuItem alloc] initWithTitle:@"Winter Scene" action:nil keyEquivalent:@""];
+	scene.submenu = [[NSMenu alloc] initWithTitle:@"Winter Scene"];
+	[scene.submenu addItem:[self toggle:@"Evergreen Forest" key:@"forest"]];
+	[scene.submenu addItem:[self toggle:@"Christmas Tree" key:@"xmasTree"]];
+	[scene.submenu addItem:[self toggle:@"Santa Visits" key:@"santa"]];
+	[m addItem:scene];
+	NSMenuItem *callSanta = [m addItemWithTitle:@"Call Santa Now" action:@selector(callSanta:) keyEquivalent:@""];
+	callSanta.target = self;
+	NSMenuItem *tip = [m addItemWithTitle:@"Hold ⌥ and sweep a drift to roll a snowball" action:nil keyEquivalent:@""];
+	tip.enabled = NO;
+	NSMenuItem *tip2 = [m addItemWithTitle:@"Open this menu anywhere: ⌃⌥⌘S" action:nil keyEquivalent:@""];
+	tip2.enabled = NO;
 	[m addItem:NSMenuItem.separatorItem];
 	NSMenuItem *loginItem = [m addItemWithTitle:@"Start at Login" action:@selector(toggleLogin:) keyEquivalent:@""];
 	loginItem.target = self;
@@ -282,6 +425,8 @@ enum { kInFlight = 3 };
 	[m addItem:NSMenuItem.separatorItem];
 	[m addItemWithTitle:@"Quit SnowDesk" action:@selector(terminate:) keyEquivalent:@"q"];
 	_status.menu = m;
+	_menu = m;
+	[self registerHotKey];
 
 	[self applySettings];
 	[self resume];
@@ -346,6 +491,36 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	}];
 }
 
+// On a Mac with a notch, macOS hides menu bar icons that do not fit, so
+// the menu also opens with ⌃⌥⌘S, or by opening SnowDesk again.
+static OSStatus hotKeyPressed(EventHandlerCallRef next, EventRef e, void *me) {
+	[(__bridge SnowController *)me popUpMenu];
+	return noErr;
+}
+
+- (void)registerHotKey {
+	EventTypeSpec spec = {kEventClassKeyboard, kEventHotKeyPressed};
+	InstallApplicationEventHandler(hotKeyPressed, 1, &spec, (__bridge void *)self, NULL);
+	EventHotKeyID hid = {'SNOW', 1};
+	RegisterEventHotKey(kVK_ANSI_S, cmdKey | optionKey | controlKey, hid, GetApplicationEventTarget(), 0, &_hotKey);
+}
+
+- (void)popUpMenu {
+	[NSApp activateIgnoringOtherApps:YES];
+	[_menu popUpMenuPositioningItem:nil atLocation:NSEvent.mouseLocation inView:nil];
+}
+
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)flag {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[self popUpMenu];
+	});
+	return NO;
+}
+
+- (void)callSanta:(id)sender {
+	snowCallSanta();
+}
+
 - (void)openRepo:(id)sender {
 	[NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:kRepoURL]];
 }
@@ -381,6 +556,9 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 		.leaves = [d boolForKey:@"leaves"],
 		.candles = [d boolForKey:@"candles"],
 		.candleCorner = (int)[d integerForKey:@"candleCorner"],
+		.forest = [d boolForKey:@"forest"],
+		.xmasTree = [d boolForKey:@"xmasTree"],
+		.santa = [d boolForKey:@"santa"],
 	});
 	[self placeCandles];
 	_opacity = [d doubleForKey:@"opacity"];
@@ -402,7 +580,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 		_candles.backgroundColor = NSColor.clearColor;
 		_candles.hasShadow = NO;
 		_candles.level = NSStatusWindowLevel;
-		_candles.collectionBehavior = _win.collectionBehavior;
+		_candles.collectionBehavior = kBehavior;
 		_candles.becomesKeyOnlyIfNeeded = YES;
 		CandleView *v = [CandleView new];
 		__weak SnowController *me = self;
@@ -424,22 +602,13 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	free(t);
 }
 
-- (void)setupMetal:(NSView *)v scale:(CGFloat)scale {
+- (void)setupMetal {
 	_device = MTLCreateSystemDefaultDevice();
 	if (!_device) {
 		NSLog(@"SnowDesk: no Metal device");
 		exit(1);
 	}
 	_queue = [_device newCommandQueue];
-	_layer = [CAMetalLayer layer];
-	_layer.device = _device;
-	_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-	_layer.opaque = NO;
-	_layer.framebufferOnly = YES;
-	_layer.frame = v.bounds;
-	_layer.contentsScale = scale;
-	_layer.drawableSize = CGSizeMake(v.bounds.size.width * scale, v.bounds.size.height * scale);
-	[v.layer addSublayer:_layer];
 
 	NSError *err = nil;
 	id<MTLLibrary> lib = [_device newLibraryWithSource:kShaders options:nil error:&err];
@@ -449,12 +618,6 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	}
 	_dotPipe = [self pipeline:lib vertex:@"dotV" fragment:@"dotF"];
 	_triPipe = [self pipeline:lib vertex:@"triV" fragment:@"triF"];
-	for (int i = 0; i < kInFlight; i++) {
-		_dotBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_DOT_FLOATS options:MTLResourceStorageModeShared];
-		_triBuf[i] = [_device newBufferWithLength:sizeof(float) * SNOW_TRI_FLOATS options:MTLResourceStorageModeShared];
-	}
-	_inflight = dispatch_semaphore_create(kInFlight);
-	_renderQ = dispatch_queue_create("SnowDesk.render", DISPATCH_QUEUE_SERIAL);
 }
 
 - (id<MTLRenderPipelineState>)pipeline:(id<MTLLibrary>)lib vertex:(NSString *)vf fragment:(NSString *)ff {
@@ -479,7 +642,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	_last = CACurrentMediaTime();
 	_timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(tick:) userInfo:nil repeats:YES];
 	[NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
-	[_win orderFrontRegardless];
+	for (Overlay *o in _overlays.allValues) [o.win orderFrontRegardless];
 	[self placeCandles];
 }
 
@@ -487,7 +650,7 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	if (_timer) {
 		[_timer invalidate];
 		_timer = nil;
-		[_win orderOut:nil];
+		for (Overlay *o in _overlays.allValues) [o.win orderOut:nil];
 		[self placeCandles];
 		item.title = @"Resume";
 	} else {
@@ -501,66 +664,39 @@ static NSString *const kRepoURL = @"https://github.com/iystoychev/snowdesk";
 	double dt = MIN(now - _last, 0.1);
 	_last = now;
 
-	int nd = 0, nt = 0;
-	float *b = snowStep(dt, &nd, &nt); // dots at b, triangles at b + SNOW_DOT_FLOATS
+	int n = snowAdvance(dt);
 	BOOL full = snowFullscreen();
 	if (full != _full) { // hide or bring back the candle mouse catcher
 		_full = full;
 		[self placeCandles];
 	}
 
-	BOOL empty = nd == 0 && nt == 0;
-	if (empty && _wasEmpty) return; // nothing to draw, surface already clear
-	// Never block the main thread on the GPU: skip the frame if it is behind.
-	if (dispatch_semaphore_wait(_inflight, DISPATCH_TIME_NOW) != 0) return;
-	_wasEmpty = empty;
-	_slot = (_slot + 1) % kInFlight;
-	int slot = _slot;
-	memcpy(_dotBuf[slot].contents, b, sizeof(float) * nd);
-	memcpy(_triBuf[slot].contents, b + SNOW_DOT_FLOATS, sizeof(float) * nt);
-	CGSize sz = _win.contentView.bounds.size; // points, top-left origin in the shader
-	Uniforms u = {sz.width, sz.height, _opacity, 0};
-	// Waiting for a drawable can block for most of a second while macOS
-	// switches desktops; do it off the main thread so the app never freezes.
-	dispatch_async(_renderQ, ^{
-		[self renderSlot:slot dots:nd tris:nt uniforms:u];
-	});
-}
-
-// renderSlot draws one frame from buffer slot on the render queue.
-- (void)renderSlot:(int)slot dots:(int)nd tris:(int)nt uniforms:(Uniforms)u {
-	id<CAMetalDrawable> drawable = [_layer nextDrawable];
-	if (!drawable) {
-		dispatch_semaphore_signal(_inflight);
-		return;
+	NSMutableDictionary<NSNumber *, NSScreen *> *screens = [NSMutableDictionary new];
+	for (NSScreen *s in NSScreen.screens) screens[@(screenID(s))] = s;
+	NSMutableSet<NSNumber *> *seen = [NSMutableSet new];
+	for (int i = 0; i < n; i++) {
+		SnowScreen sc;
+		snowScreen(i, &sc);
+		NSScreen *screen = screens[@(sc.id)];
+		if (!screen) continue; // unplugged; Go notices within a second
+		[seen addObject:@(sc.id)];
+		Overlay *o = _overlays[@(sc.id)];
+		if (!o) {
+			o = [[Overlay alloc] initWithScreen:screen device:_device queue:_queue dotPipe:_dotPipe triPipe:_triPipe];
+			_overlays[@(sc.id)] = o;
+			[o.win orderFrontRegardless];
+		}
+		[o fitScreen:screen];
+		int nd = 0, nt = 0;
+		float *b = snowFrame(i, &nd, &nt);
+		[o draw:b dots:nd tris:nt opacity:_opacity];
 	}
-	MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
-	rp.colorAttachments[0].texture = drawable.texture;
-	rp.colorAttachments[0].loadAction = MTLLoadActionClear;
-	rp.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
-	rp.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-	id<MTLCommandBuffer> cb = [_queue commandBuffer];
-	id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
-	[enc setVertexBytes:&u length:sizeof u atIndex:1];
-	[enc setFragmentBytes:&u length:sizeof u atIndex:0];
-	if (nt > 0) { // triangles first: dots (bulbs, flakes) sit on top
-		[enc setRenderPipelineState:_triPipe];
-		[enc setVertexBuffer:_triBuf[slot] offset:0 atIndex:0];
-		[enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:nt / 6];
+	for (NSNumber *k in _overlays.allKeys) {
+		if (![seen containsObject:k]) {
+			[_overlays[k].win orderOut:nil];
+			[_overlays removeObjectForKey:k];
+		}
 	}
-	if (nd > 0) {
-		[enc setRenderPipelineState:_dotPipe];
-		[enc setVertexBuffer:_dotBuf[slot] offset:0 atIndex:0];
-		[enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:nd / 8];
-	}
-	[enc endEncoding];
-	dispatch_semaphore_t sem = _inflight;
-	[cb addCompletedHandler:^(id<MTLCommandBuffer> _) {
-		dispatch_semaphore_signal(sem);
-	}];
-	[cb presentDrawable:drawable];
-	[cb commit];
 }
 @end
 
@@ -570,6 +706,7 @@ void runApp(void) {
 		app.activationPolicy = NSApplicationActivationPolicyAccessory;
 		static SnowController *c;
 		c = [SnowController new];
+		app.delegate = c;
 		[c start];
 		[app run];
 	}

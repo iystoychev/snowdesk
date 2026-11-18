@@ -8,8 +8,9 @@ typedef struct {
 } SnowWin;
 
 typedef struct {
-	double w, h;                       // main screen size
-	double dockX, dockY, dockW, dockH; // estimated Dock rect; dockW == 0 when none
+	unsigned int id;                   // CGDirectDisplayID
+	double x, y, w, h;                 // frame in global points, top-left origin of the main screen
+	double dockX, dockY, dockW, dockH; // estimated Dock rect in screen points; dockW == 0 when none
 } SnowScreen;
 
 // Shared draw buffer: SNOW_DOT_FLOATS floats of dots (8 each), then
@@ -21,6 +22,7 @@ typedef struct {
 	double amount, size;
 	int piles, lights, icicles, wind, sparkles, frost, stars, fireflies, leaves;
 	int candles, candleCorner; // corner: 0 bottom left, 1 bottom right, 2 top left, 3 top right
+	int forest, xmasTree, santa;
 } SnowSettings;
 
 // runApp starts the Cocoa app and never returns. Call on the main thread.
@@ -36,6 +38,12 @@ int listWindows(SnowWin *out, int max, int *dockUp);
 // (another Space, minimized), else 0.
 void windowsExist(const unsigned int *ids, int n, unsigned char *exists);
 
-void screenInfo(SnowScreen *s);
+// screensInfo fills out with the connected screens, the main one (with
+// the menu bar and Dock) first, and returns how many. Only the main one
+// gets a Dock estimate.
+int screensInfo(SnowScreen *out, int max);
 
 void cursorPos(double *x, double *y);
+
+// optionDown reports whether the Option key is held (no permission needed).
+int optionDown(void);
