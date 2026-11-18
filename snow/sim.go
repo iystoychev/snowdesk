@@ -67,6 +67,8 @@ type pile struct {
 	flingV   Point   // latest speed of that move
 	scaledAt float64 // window clock when Mission Control-style scaling began; 0 = not scaled
 	seed     uint64  // picks this window's drift shape
+	cap      float64 // max pile height; 0 = maxPile
+	always   bool    // catches every flake that crosses it (the snowbank)
 }
 
 // Sim is the whole snow state. It is not safe for concurrent use.
@@ -95,6 +97,26 @@ type Sim struct {
 	leafAcc                    float64
 	candle                     candles
 	full                       bool // a fullscreen app is showing: draw nothing
+
+	// Main marks the Sim for the screen with the Dock: only it draws the
+	// winter scene (snowbank, forest, Christmas tree, Santa) and candles.
+	Main bool
+	// NoDock marks a screen that never has the Dock, so a fullscreen app is
+	// told apart by covering the whole screen, menu bar strip included.
+	NoDock bool
+	// Option is whether the Option key is held: the cursor rolls snowballs
+	// instead of brushing snow away.
+	Option bool
+
+	dock      Rect
+	groundY   float64
+	trees     []tree
+	treeKey   [5]float64
+	balls     []*ball
+	carried   *ball
+	claus     santa
+	gifts     []gift
+	santaNext float64
 }
 
 // Settings are the user-adjustable knobs.
@@ -112,10 +134,14 @@ type Settings struct {
 	Leaves       bool    // autumn leaves tumble down
 	Candles      bool    // candles in a screen corner; drag them to another one
 	CandleCorner int     // BottomLeft, BottomRight, TopLeft or TopRight
+	Forest       bool    // evergreens stand along the snowbank (main screen)
+	XmasTree     bool    // a lit Christmas tree beside the Dock (main screen)
+	Santa        bool    // Santa walks by every few minutes (main screen)
 }
 
 func DefaultSettings() Settings {
-	return Settings{Amount: 1, Size: 1, Piles: true, Lights: true, Icicles: true, Wind: true, Sparkles: true, Frost: true}
+	return Settings{Amount: 1, Size: 1, Piles: true, Lights: true, Icicles: true, Wind: true, Sparkles: true, Frost: true,
+		Forest: true, XmasTree: true, Santa: true}
 }
 
 func New(w, h float64, seed uint64) *Sim {
@@ -133,7 +159,7 @@ func New(w, h float64, seed uint64) *Sim {
 func (s *Sim) PileIDs() []uint32 {
 	ids := make([]uint32, 0, len(s.piles))
 	for id := range s.piles {
-		if id != DockID {
+		if id != DockID && id != GroundID {
 			ids = append(ids, id)
 		}
 	}
@@ -181,6 +207,7 @@ func (s *Sim) SetWindows(ws []Window, dock Rect, dt float64) {
 		s.updatePile(DockID, dock, nil, dt, calm)
 		occluders = append(occluders, dock)
 	}
+	s.updateGround(dock, dt, calm)
 	for _, w := range ws {
 		if w.Hidden {
 			if p, ok := s.piles[w.ID]; ok {
@@ -212,12 +239,16 @@ func (s *Sim) SetWindows(ws []Window, dock Rect, dt float64) {
 // top may be up to fullTop down. A zoomed window with an auto-hidden Dock
 // fills the same space, but the Dock's window is still there.
 func (s *Sim) fullscreen(ws []Window) bool {
-	if !s.DockGone {
+	if !s.DockGone && !s.NoDock {
 		return false
+	}
+	top := fullTop
+	if s.NoDock {
+		top = 1 // no Dock to go by: the window must cover the menu bar strip too
 	}
 	for _, w := range ws {
 		b := w.Bounds
-		if !w.Hidden && b.X <= 0 && b.Y <= fullTop && b.X+b.W >= s.W && b.Y+b.H >= s.H {
+		if !w.Hidden && b.X <= 0 && b.Y <= top && b.X+b.W >= s.W && b.Y+b.H >= s.H {
 			return true
 		}
 	}
@@ -232,7 +263,7 @@ func (s *Sim) updatePile(id uint32, b Rect, front []Rect, dt float64, calm bool)
 	p, ok := s.piles[id]
 	if !ok {
 		p = &pile{bounds: b, cols: make([]float64, ncols(b.W)), seed: uint64(id)}
-		if id != DockID { // the Dock's bottom is the screen edge
+		if id != DockID && id != GroundID { // the Dock's bottom is the screen edge
 			p.icicles = s.newIcicles(b.W)
 		}
 		s.piles[id] = p
@@ -263,7 +294,7 @@ func (s *Sim) updatePile(id uint32, b Rect, front []Rect, dt float64, calm bool)
 		s.shed(p, 0, len(p.cols), Point{}, true)
 		s.breakIcicles(p, Point{})
 		p.cols = make([]float64, ncols(b.W))
-		if id != DockID {
+		if id != DockID && id != GroundID {
 			p.icicles = s.newIcicles(b.W)
 		}
 	case (b.X != old.X || b.Y != old.Y) && dt > 0 && !calm:
@@ -409,7 +440,11 @@ func (p *pile) colX(i int) float64 { return p.bounds.X + (float64(i)+0.5)*colW }
 // snow settles into drifts instead of an even strip.
 func (p *pile) colMax(i int) float64 {
 	d := math.Min(float64(i)+0.5, float64(len(p.cols)-i)-0.5) * colW
-	return maxPile * p.drift(i) * math.Min(1, math.Sqrt(math.Max(d, 0)/edgeTaper))
+	m := maxPile
+	if p.cap > 0 {
+		m = p.cap
+	}
+	return m * p.drift(i) * math.Min(1, math.Sqrt(math.Max(d, 0)/edgeTaper))
 }
 
 // drift is a smooth bumpy profile in [driftMin, 1] for column i: wide
@@ -476,7 +511,12 @@ func (s *Sim) Step(dt float64, cursor Point) {
 	if dt > 0 {
 		cv = Point{clamp((cursor.X-s.lastCur.X)/dt, refSpeed), clamp((cursor.Y-s.lastCur.Y)/dt, refSpeed)}
 	}
-	s.brush(cursor, cv)
+	if !s.Option {
+		s.brush(cursor, cv)
+		s.brushTrees(cursor, cv)
+	}
+	s.stepBalls(dt, cursor, cv)
+	s.stepSanta(dt, cursor)
 	s.stepWind(dt)
 	s.stepSparkles(dt, s.lastCur, cursor)
 	s.stepFrost(dt, cursor)
@@ -498,7 +538,7 @@ func (s *Sim) Step(dt float64, cursor Point) {
 		f.vy = f.vy*k + gravity*dt
 		f.x += (f.vx + s.wind + math.Sin(s.t*1.3+f.phase)*12) * dt
 		f.y += f.vy * dt
-		if s.cfg.Piles && f.vy > 0 && s.land(f.x, py, f.y) {
+		if s.cfg.Piles && f.vy > 0 && (s.landTree(f.x, py, f.y) || s.land(f.x, py, f.y)) {
 			continue
 		}
 		if f.y > s.H+5 || f.x < -50 || f.x > s.W+50 {
@@ -540,7 +580,7 @@ func (s *Sim) land(x, y0, y1 float64) bool {
 			continue
 		}
 		surf := p.bounds.Y - p.cols[i]
-		if y0 < surf && y1 >= surf && s.rng.Float64() < catchChance {
+		if y0 < surf && y1 >= surf && (p.always || s.rng.Float64() < catchChance) {
 			best, bestI = p, i
 			break
 		}

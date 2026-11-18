@@ -34,6 +34,14 @@
 - **Resize a window** and its snow falls off.
 - **Fling a window** and its snow flies off at the window's speed.
 - **Run the cursor along a pile** to brush the snow off, including off the Dock.
+- **Roll a snowman.** Hold ⌥ Option and sweep through a drift: a snowball forms and grows as it rolls. Let go of ⌥ to drop it on a ledge, the snowbank or another ball. Stack three and it becomes a snowman with coal eyes and smile, a carrot nose, coal buttons, stick arms, a red scarf and a top hat. Hold ⌥ over the top ball to pick it up again.
+
+A winter scene stands along the bottom of the main screen (each part can be turned off under **Winter Scene**):
+
+- **A snowbank** level with the top of the Dock, which catches every flake that reaches it.
+- **An evergreen forest** in two rows. Snow settles on each tier of branches; sweep the cursor through a tree to shake it off.
+- **A Christmas tree** in the open space beside the Dock, with chasing lights, a gold star and presents underneath. Its lights glow dimmer as snow covers them.
+- **Santa** walks in with his sack every few minutes (or pick **Call Santa Now**), stops by the tree to wave, leaves a new present under it and walks off the other side. He leaves footprints in the snowbank and hops when the cursor gets close.
 
 Decorations come with it. Shooting stars, fireflies, leaves and candles are off by default; turn them on in the menu.
 
@@ -132,9 +140,14 @@ The ❄︎ menu bar item holds the settings. They are saved, so they stay after 
 | Flake Size | Small, Normal, Large |
 | Opacity | 40%, 70%, 100% |
 | Pile Up on Windows | on / off (off drops all piled snow) |
+| Winter Scene | Evergreen Forest, Christmas Tree, Santa Visits — each on / off (on by default) |
 | Decorations | Christmas Lights, Icicles, Wind Gusts, Cursor Sparkles, Frosted Corners (on by default); Shooting Stars, Fireflies, Falling Leaves, Candles (off by default) — each on / off |
 
-The menu also has Start at Login, Pause and Quit.
+The menu also has Call Santa Now, Start at Login, Pause and Quit.
+
+On a Mac with a notch, macOS hides menu bar icons that do not fit next to the notch. If you cannot see ❄︎, press **⌃⌥⌘S** anywhere, or open SnowDesk again from Spotlight or Finder, and the menu opens at the cursor.
+
+Every display gets its own snow. The winter scene and the candles stay on the main display, the one with the Dock.
 
 Snow and icicles on a window survive switching Spaces and minimizing. They only fall when the window closes, is resized, or is flung. While an app is fullscreen, SnowDesk hides everything and brings it back when you leave.
 
@@ -150,7 +163,7 @@ It draws everything on the GPU in one pass: the app uses about 5% CPU. Pick **Sn
 The app is not notarized by Apple. Open it once with **right-click → Open**, or see step 3 of [Download](#download).
 
 **Does it work on multiple displays?**
-Only on the main display for now. Help is welcome!
+Yes. Each display gets its own overlay and its own snow, and windows pile up wherever they are. Flakes do not fall from one display onto another.
 
 ## Contributing
 
@@ -158,16 +171,16 @@ Ideas, bug reports and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBU
 
 ## How it works
 
-- `snow/` is the simulation in plain Go: flakes, piles (one height column every 3 pt along each window's top edge), occlusion by windows in front, shedding, brushing, settings (`sim.go`), the decorations (`decor.go`) and the countdown (`christmas.go`). `go test ./snow/` covers it.
+- `snow/` is the simulation in plain Go: flakes, piles (one height column every 3 pt along each window's top edge), occlusion by windows in front, shedding, brushing, settings (`sim.go`), the decorations (`decor.go`), the snowbank, forest and Christmas tree (`scene.go`), snowballs and snowmen (`snowman.go`), Santa (`santa.go`) and the countdown (`christmas.go`). `go test ./snow/` covers it.
 - `snow/draw.go` turns each frame into two shapes only: soft colored dots (flakes, bulbs, sparkles, frost crystals) and colored triangles (piles, icicles, light wire, frost). New effects need no renderer changes.
-- `overlay_darwin.m` is the Cocoa side. It has a transparent, click-through window at status-bar level and reads `CGWindowListCopyWindowInfo` for window bounds. It draws with Metal into a single GPU surface: one instanced draw for the dots and one for the triangles. WindowServer only blends that one surface, so video playback underneath keeps running smoothly.
+- `overlay_darwin.m` is the Cocoa side. It has a transparent, click-through window at status-bar level on each display and reads `CGWindowListCopyWindowInfo` for window bounds. It draws with Metal into a single GPU surface: one instanced draw for the dots and one for the triangles. WindowServer only blends that one surface, so video playback underneath keeps running smoothly.
 - `login/` writes and removes the Start at Login LaunchAgent.
 - `packaging/` holds the app's `Info.plist` and icon (`make icon` redraws it from `packaging/icon`). The `Makefile` builds and installs the app.
-- `main.go` connects them. A 60 Hz timer calls the Go `snowStep`, which returns a draw buffer.
+- `main.go` connects them. It keeps one simulation per display, in that display's own coordinates. A 60 Hz timer calls the Go `snowAdvance`, then `snowFrame` for each display, which returns its draw buffer.
 
 ## Limits
 
-- Main display only.
+- Snow does not cross between displays, and the Dock ledge and winter scene are on the main display only.
 - No icicles under the Dock: its bottom edge is the bottom of the screen.
 - macOS does not expose the Dock's width without Accessibility permission, so the app estimates it from the Dock's item count and icon size. It may be off by an icon or two. When the Dock is hidden or on the side, there is no Dock ledge.
 - The app itself uses about 5% CPU. WindowServer uses roughly 12–15% more while it runs, at any snow amount.

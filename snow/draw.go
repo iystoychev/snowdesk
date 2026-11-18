@@ -50,10 +50,14 @@ func (s *Sim) Fill(dots, tris []float32) (nd, nt int) {
 	}
 	f := &frame{dots: dots, tris: tris}
 	s.drawFrost(f)
+	s.drawGround(f)
+	s.drawTrees(f)
 	s.drawPiles(f)
 	s.drawIcicles(f)
 	s.drawLights(f)
 	s.drawCandles(f)
+	s.drawBalls(f)
+	s.drawSanta(f)
 	snow := rgba{1, 1, 1, 0.95}
 	for _, fl := range s.flakes {
 		f.dot(fl.x, fl.y, fl.r*s.cfg.Size, 0.55, snow)

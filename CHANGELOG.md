@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Snowballs and snowmen: hold ⌥ and sweep through a drift to roll a ball that grows as it goes; stack three for a snowman with a face, carrot nose, buttons, arms, scarf and hat.
+- A winter scene along the bottom of the main screen: a snowbank level with the Dock, an evergreen forest and a lit Christmas tree with presents. Snow settles on every tier of branches and the cursor shakes it off.
+- Santa walks by every few minutes, waves by the tree and leaves a new present under it. **Call Santa Now** brings him right away.
+- Multiple displays: every screen gets its own snow.
+- The menu opens with ⌃⌥⌘S or by opening the app again, for Macs where the notch hides the menu bar icon.
+
 ## 1.1 — 2026-11-07
 
 - Snow piles into uneven drifts instead of an even strip; each window gets its own shape.
